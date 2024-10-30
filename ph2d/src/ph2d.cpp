@@ -32,6 +32,170 @@ void normalizeSafe(glm::vec2 &v)
 namespace ph2d
 {
 
+	//The second is the circle
+	bool AABBvsCircle(AABB abox, AABB bbox, float &penetration,
+		glm::vec2 &normal)
+	{
+
+		// Vector from A to B
+		glm::vec2 n = bbox.center() - abox.center();
+
+		// Closest point on A to center of B
+		glm::vec2 closest = n;
+
+		// Calculate half extents along each axis
+		float x_extent = (abox.max().x - abox.min().x) / 2;
+		float y_extent = (abox.max().y - abox.min().y) / 2;
+
+		// Clamp point to edges of the AABB
+		closest.x = glm::clamp(closest.x, - x_extent, x_extent);
+		closest.y = glm::clamp(closest.y, -y_extent, y_extent);
+
+		bool inside = false;
+		// Circle is inside the AABB, so we need to clamp the circle's center
+		// to the closest edge
+		if (n == closest)
+		{
+
+			inside = true;
+
+			// Find closest axis
+			if (abs(n.x) > abs(n.y))
+			{
+
+				// Clamp to closest extent
+				if (closest.x > 0)
+				{
+					closest.x = x_extent;
+				}
+				else
+				{
+					closest.x = -x_extent;
+				}
+			}
+			// y axis is shorter
+			else
+			{
+				// Clamp to closest extent
+				if (closest.y > 0)
+				{
+					closest.y = y_extent;
+				}
+				else
+				{
+					closest.y = -y_extent;
+				};
+			}
+
+		}
+
+		glm::vec2 normal2 = n - closest;
+		float d = glm::dot(normal2, normal2);
+		float r = bbox.size.x/2.f;
+
+		// Early out of the radius is shorter than distance to closest point and
+		// Circle not inside the AABB
+		if (d > r * r && !inside)
+		{
+			return false;
+		}
+
+
+		// Avoided sqrt until we needed
+		d = sqrt(d);
+
+		// Collision normal needs to be flipped to point outside if circle was
+		// inside the AABB
+		if (inside)
+		{
+			normal = -n;
+			penetration = r - d;
+		}
+		else
+		{
+			normal = n;
+			penetration = r - d;
+		}
+
+		normalizeSafe(normal);
+
+		return true;
+	}
+
+
+	bool AABBvsAABB(AABB abox, AABB bbox, float &penetration,
+		glm::vec2 &normal)
+	{
+		// Vector from A to B
+		glm::vec2 n = bbox.center() - abox.center();
+
+		// Calculate half extents along x axis for each object
+		float a_extent = (abox.max().x - abox.min().x) / 2;
+		float b_extent = (bbox.max().x - bbox.min().x) / 2;
+
+		auto aMax = abox.max();
+		auto aMin = abox.min();
+		auto bMax = bbox.max();
+		auto bMin = bbox.min();
+
+		// Calculate overlap on x axis
+		float x_overlap = a_extent + b_extent - abs(n.x);
+
+		// SAT test on x axis
+		if (x_overlap > 0)
+		{
+
+			// Calculate half extents along x axis for each object
+			float a_extent = (abox.max().y - abox.min().y) / 2.f;
+			float b_extent = (bbox.max().y - bbox.min().y) / 2.f;
+
+			// Calculate overlap on y axis
+			float y_overlap = a_extent + b_extent - abs(n.y);
+
+			// SAT test on y axis
+			if (y_overlap > 0)
+			{
+
+				// Find out which axis is axis of least penetration
+				if (x_overlap < y_overlap)
+				{
+
+					// Point towards B knowing that n points from A to B
+					if (n.x < 0)
+					{
+						normal = glm::vec2(-1, 0);
+					}
+					else
+					{
+						normal = glm::vec2(1, 0);
+					}
+
+					penetration = x_overlap;
+					return true;
+				}
+				else
+				{
+
+					// Point toward B knowing that n points from A to B
+					if (n.y < 0)
+					{
+						normal = glm::vec2(0, -1);
+					}
+					else
+					{
+						normal = glm::vec2(0, 1);
+					}
+
+					penetration = y_overlap;
+					return true;
+				}
+
+			}
+
+		}
+
+		return false;
+	}
 
 
 	bool AABBvsAABB(AABB a, AABB b, float delta)
@@ -154,10 +318,24 @@ bool overlap(ph2d::Body &a, ph2d::Body &b)
 void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 {
 
-	auto impulseResolution = [&](auto &A, auto &B, glm::vec2 normal, 
-		float velAlongNormal)
+
+	auto positionalCorrection = [&](auto &A, auto &B, glm::vec2 n, 
+		float penetrationDepth, float aInverseMass, float bInverseMass)
 	{
 
+		const float percent = 0.2; // usually 20% to 80%
+		const float slop = 0.01; // usually 0.01 to 0.1 
+
+		glm::vec2 correction = (glm::max(penetrationDepth - slop, 0.0f) / (aInverseMass + bInverseMass)) * percent * n;
+
+		A.motionState.pos -= aInverseMass * correction;
+		B.motionState.pos += bInverseMass * correction;
+	};
+
+
+	auto impulseResolution = [&](auto &A, auto &B, glm::vec2 normal, 
+		float velAlongNormal, float penetrationDepth)
+	{
 
 		//calculate elasticity
 		float e = std::min(A.elasticity, B.elasticity);
@@ -176,6 +354,8 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 		glm::vec2 impulse = j * normal;
 		A.motionState.velocity -= massInverseA * impulse;
 		B.motionState.velocity += massInverseB * impulse;
+
+		positionalCorrection(A, B, normal, penetrationDepth, massInverseA, massInverseB);
 	};
 
 	size_t bodiesSize = bodies.size();
@@ -190,7 +370,7 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 		for (int j = 0; j < bodiesSize; j++)
 		{
 
-			if (i == j) { break; }
+			if (i == j) { continue; }
 
 			auto &A = bodies[i];
 			auto &B = bodies[j];
@@ -221,27 +401,13 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 					}
 					else
 					{
-						impulseResolution(A, B, normal, velAlongNormal);
+						float penetration =
+							A.collider.collider.circle.radius + B.collider.collider.circle.radius - 
+							glm::distance(A.motionState.pos, B.motionState.pos);
+
+						impulseResolution(A, B, normal, velAlongNormal, penetration);
 					}
 
-
-					////circle overlapping here
-					//float overlap = A.collider.collider.circle.radius + B.collider.collider.circle.radius
-					//	- glm::distance(A.motionState.pos, B.motionState.pos);
-					//
-					//glm::vec2 diffVector = (A.motionState.pos - B.motionState.pos);
-					//float distLen = glm::length(diffVector);
-					//if (distLen == 0)
-					//{
-					//	diffVector = {1,0};
-					//}
-					//else
-					//{
-					//	diffVector /= distLen;
-					//}
-					//
-					//A.motionState.pos += overlap * (diffVector) * 0.5f;
-					//B.motionState.pos -= overlap * (diffVector) * 0.5f;
 
 				}
 			}
@@ -249,52 +415,59 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 				B.collider.type == ph2d::ColliderBox)
 			{
 
+				auto abox = A.getAABB();
+				auto bbox = B.getAABB();
+
+				glm::vec2 normal = {};
+				float penetration = 0;
+
 				if (ph2d::AABBvsAABB(
-					A.getAABB(), B.getAABB()))
+					abox, bbox, penetration, normal))
 				{
 
 					glm::vec2 relativeVelocity = B.motionState.velocity -
 						A.motionState.velocity;
-					glm::vec2 relativeVelocityNormalized = relativeVelocity;
-					normalizeSafe(relativeVelocityNormalized);
-
-					glm::vec2 normal = {1,0};
-
-					float up = glm::dot(relativeVelocityNormalized, {0,1});
-					float down = glm::dot(relativeVelocityNormalized, {0,-1});
-					float left = glm::dot(relativeVelocityNormalized, {-1,0});
-					float right = glm::dot(relativeVelocityNormalized, {1,0});
-
-					float current = 0;
-					if (up > down)
+					float velAlongNormal = glm::dot(relativeVelocity, normal);
+					
+					// Do not resolve if velocities are separating
+					if (velAlongNormal > 0)
 					{
-						current = up;
-						normal = {0, 1};
+					
 					}
 					else
 					{
-						current = down;
-						normal = {0, -1};
+						impulseResolution(A, B, normal, velAlongNormal, penetration);
 					}
-
-					if (left > current)
-					{
-						current = left;
-						normal = {-1,0};
-					}
-
-					if (right > current)
-					{
-						current = right;
-						normal = {1,0};
-					}
-
-					float velAlongNormal = glm::dot(relativeVelocity, normal);
-
-					impulseResolution(A, B, normal, velAlongNormal);
 				}
 
+			}
+			else if (A.collider.type == ph2d::ColliderBox &&
+				B.collider.type == ph2d::ColliderCircle)
+			{
 
+				auto abox = A.getAABB();
+				auto bbox = B.getAABB();
+
+				glm::vec2 normal = {};
+				float penetration = 0;
+
+				if (ph2d::AABBvsCircle(
+					abox, bbox, penetration, normal))
+				{
+					glm::vec2 relativeVelocity = B.motionState.velocity -
+						A.motionState.velocity;
+					float velAlongNormal = glm::dot(relativeVelocity, normal);
+
+					// Do not resolve if velocities are separating
+					if (velAlongNormal > 0)
+					{
+
+					}
+					else
+					{
+						impulseResolution(A, B, normal, velAlongNormal, penetration);
+					}
+				}
 
 			}
 

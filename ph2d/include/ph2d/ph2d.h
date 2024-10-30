@@ -38,6 +38,11 @@ namespace ph2d
 		glm::vec2 min() { return pos; }
 		glm::vec2 max() { return pos + size; }
 		glm::vec2 center() { return pos + size / 2.f; }
+
+		float down() { return pos.y + size.y; }
+		float top() { return pos.y; }
+		float left() { return pos.x; }
+		float right() { return pos.x + size.x; }
 	};
 
 

@@ -25,22 +25,28 @@ bool initGame()
 	gl2d::init();
 	renderer.create();
 
-	for (int i = 0; i < 5; i++)
+	for (int i = 0; i < 10; i++)
 	{
-		//float r = rand() % 70 + 10;
-		//float mass = (r * r) / 10.f;
+		//if (i == 1) { mass = 0; }
 
-		float w = rand() % 140 + 20;
-		float h = rand() % 140 + 20;
-		float mass = w * h;
+		if(1)
+		{
+			float w = rand() % 140 + 20;
+			float h = rand() % 140 + 20;
+			float mass = w * h;
 
-		if (i == 1) { mass = 0; }
+			physicsEngine.addBody({rand() % 800 + 100, rand() % 800 + 100},
+				ph2d::createBoxCollider({w, h}), mass);
+		}
 
-		physicsEngine.addBody({rand() % 800 + 100, rand() % 800 + 100},
-			ph2d::createBoxCollider({w, h}), mass);
+		if(1)
+		{
+			float r = rand() % 70 + 10;
+			float mass = (r * r * 3.1415);
 
-		//physicsEngine.addBody({rand() % 800 + 100, rand() % 800 + 100}, 
-		//	ph2d::createCircleCollider({r}), mass);
+			physicsEngine.addBody({rand() % 800 + 100, rand() % 800 + 100},
+				ph2d::createCircleCollider({r}), mass);
+		}
 	}
 
 
@@ -143,7 +149,7 @@ bool gameLogic(float deltaTime)
 
 	for (int i = 0; i < simulationSpeed; i++)
 	{
-		//for (int i=1; i<physicsEngine.bodies.size(); i++)
+		//for (int i=0; i<physicsEngine.bodies.size(); i++)
 		//{
 		//	physicsEngine.bodies[i].motionState.acceleration += glm::vec2(0, 9.81) * 10.f;
 		//}
