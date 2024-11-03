@@ -64,7 +64,6 @@ namespace ph2d
 
 	bool AABBvsPoint(AABB a, glm::vec2 b, float delta = 0);
 
-	bool CirclevsCircle(Circle a, Circle b, float delta = 0);
 
 	struct MotionState
 	{
@@ -122,6 +121,14 @@ namespace ph2d
 	{
 		std::vector<Body> bodies;
 
+		//this will make the simulation run at fixed intervals of time, making it deterministic.
+		// it is measured in secconds, so if you set it to 0.016, it will be updated 60 times a seccond, 
+		// if you set it to 0.032, it will be updated 30 times a seccond, and a smaller number will get a lot more updates!
+		//you can set it to 0 if you want it to just update with the deltaTime;
+		float setFixedTimeStamp = 0.016;
+		float maxAccumulated = 0.32;
+
+		float _fixedTimeAccumulated = 0;
 		void runSimulation(float deltaTime);
 
 		void addBody(glm::vec2 centerPos, Collider collider, float mass = 1);

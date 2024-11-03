@@ -25,7 +25,7 @@ bool initGame()
 	gl2d::init();
 	renderer.create();
 
-	for (int i = 0; i < 10; i++)
+	for (int i = 0; i < 2; i++)
 	{
 		//if (i == 1) { mass = 0; }
 
@@ -149,9 +149,11 @@ bool gameLogic(float deltaTime)
 
 	for (int i = 0; i < simulationSpeed; i++)
 	{
+
+		//gravity
 		//for (int i=0; i<physicsEngine.bodies.size(); i++)
 		//{
-		//	physicsEngine.bodies[i].motionState.acceleration += glm::vec2(0, 9.81) * 10.f;
+		//	physicsEngine.bodies[i].motionState.acceleration += glm::vec2(0, 9.81) * 100.f;
 		//}
 
 		physicsEngine.runSimulation(deltaTime);
