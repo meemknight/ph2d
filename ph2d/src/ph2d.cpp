@@ -7,6 +7,9 @@
 //////////////////////////////////////////////////
 
 
+//credits:
+//https://gamedevelopment.tutsplus.com/tutorials/how-to-create-a-custom-2d-physics-engine-the-basics-and-impulse-resolution--gamedev-6331
+
 //todo layers
 //todo apply force,
 //todo optimize collisions using some octrees maybe or something.
@@ -314,6 +317,11 @@ namespace ph2d
 
 };
 
+float PythagoreanSolve(float fA, float fB)
+{
+	return std::sqrt(fA * fA + fB * fB);
+}
+
 bool overlap(ph2d::Body &a, ph2d::Body &b)
 {
 
@@ -351,11 +359,11 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 
 	for (int currentIteration = 0; currentIteration < counter; currentIteration++)
 	{
-		auto positionalCorrection = [&](auto &A, auto &B, glm::vec2 n, 
+		auto positionalCorrection = [&](Body &A, Body &B, glm::vec2 n,
 			float penetrationDepth, float aInverseMass, float bInverseMass)
 		{
 
-			const float percent = 0.2; // usually 20% to 80%
+			const float percent = 0.25; // usually 20% to 80%
 			const float slop = 0.01; // usually 0.01 to 0.1 
 
 			glm::vec2 correction = (glm::max(penetrationDepth - slop, 0.0f) / (aInverseMass + bInverseMass)) * percent * n;
@@ -364,8 +372,37 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 			B.motionState.pos += bInverseMass * correction;
 		};
 
+		auto applyFriction = [&](Body &A, Body &B, glm::vec2 tangent, glm::vec2 rv,
+			float aInverseMass, float bInverseMass, float j)
+		{
+			// Solve for magnitude to apply along the friction vector
+			float jt = -glm::dot(rv, tangent);
+			jt = jt / (aInverseMass + bInverseMass);
 
-		auto impulseResolution = [&](auto &A, auto &B, glm::vec2 normal, 
+			// PythagoreanSolve = A^2 + B^2 = C^2, solving for C given A and B
+			// Use to approximate mu given friction coefficients of each body
+			float mu = PythagoreanSolve(A.staticFriction, B.staticFriction);
+
+			// Clamp magnitude of friction and create impulse vector
+			//(Coulomb's Law) Ff<=Fn
+			glm::vec2 frictionImpulse = {};
+			if (abs(jt) < j * mu)
+			{
+				frictionImpulse = jt * tangent;
+			}
+			else
+			{
+				float dynamicFriction = PythagoreanSolve(A.dynamicFriction, B.dynamicFriction);
+				frictionImpulse = -j * tangent * dynamicFriction;
+			}
+
+			// Apply
+			A.motionState.velocity -= (aInverseMass)*frictionImpulse;
+			B.motionState.velocity += (bInverseMass)*frictionImpulse;
+
+		};
+
+		auto impulseResolution = [&](Body &A, Body &B, glm::vec2 normal,
 			float velAlongNormal, float penetrationDepth)
 		{
 
@@ -388,6 +425,24 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 			B.motionState.velocity += massInverseB * impulse;
 
 			positionalCorrection(A, B, normal, penetrationDepth, massInverseA, massInverseB);
+
+			{
+
+				// Re-calculate relative velocity after normal impulse
+				// is applied (impulse from first article, this code comes
+				// directly thereafter in the same resolve function)
+
+				glm::vec2 rv = B.motionState.velocity - A.motionState.velocity;
+
+				// Solve for the tangent vector
+				glm::vec2 tangent = rv - glm::dot(rv, normal) * normal;
+
+				normalizeSafe(tangent);
+				
+				applyFriction(A, B, tangent, rv, massInverseA, massInverseB, j);
+			}
+
+
 		};
 
 		size_t bodiesSize = bodies.size();
@@ -396,9 +451,8 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 
 			//applyDrag(bodies[i].motionState);
 
-			updateForces(bodies[i].motionState, 0, deltaTime);
-
 			//detect colisions
+			//for(int _ = 0; _ < 4; _++)
 			for (int j = 0; j < bodiesSize; j++)
 			{
 
@@ -497,6 +551,7 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 
 			}
 
+			updateForces(bodies[i].motionState, 0, deltaTime);
 			bodies[i].motionState.lastPos = bodies[i].motionState.pos;
 		}
 

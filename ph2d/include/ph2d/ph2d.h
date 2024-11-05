@@ -111,8 +111,10 @@ namespace ph2d
 
 		Collider collider = {};
 
-		float elasticity = 1;
+		float elasticity = 0.2;
 		float mass = 1;
+		float staticFriction = 0.5;
+		float dynamicFriction = 0.5;
 
 		AABB getAABB();
 	};
@@ -125,7 +127,7 @@ namespace ph2d
 		// it is measured in secconds, so if you set it to 0.016, it will be updated 60 times a seccond, 
 		// if you set it to 0.032, it will be updated 30 times a seccond, and a smaller number will get a lot more updates!
 		//you can set it to 0 if you want it to just update with the deltaTime;
-		float setFixedTimeStamp = 0.016;
+		float setFixedTimeStamp = 0.008;
 		float maxAccumulated = 0.32;
 
 		float _fixedTimeAccumulated = 0;

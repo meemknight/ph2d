@@ -25,14 +25,14 @@ bool initGame()
 	gl2d::init();
 	renderer.create();
 
-	for (int i = 0; i < 2; i++)
+	for (int i = 0; i < 10; i++)
 	{
 		//if (i == 1) { mass = 0; }
 
 		if(1)
 		{
-			float w = rand() % 140 + 20;
-			float h = rand() % 140 + 20;
+			float w = rand() % 100 + 20;
+			float h = rand() % 100 + 20;
 			float mass = w * h;
 
 			physicsEngine.addBody({rand() % 800 + 100, rand() % 800 + 100},
@@ -41,13 +41,16 @@ bool initGame()
 
 		if(1)
 		{
-			float r = rand() % 70 + 10;
+			float r = rand() % 60 + 10;
 			float mass = (r * r * 3.1415);
 
 			physicsEngine.addBody({rand() % 800 + 100, rand() % 800 + 100},
 				ph2d::createCircleCollider({r}), mass);
 		}
 	}
+
+	//physicsEngine.addBody({500, 1100}, 
+	//	ph2d::createBoxCollider({1100, 10}), 0.f);
 
 
 	//physicsEngine.addBody({300, 100}, ph2d::createCircleCollider({25}));
@@ -151,10 +154,11 @@ bool gameLogic(float deltaTime)
 	{
 
 		//gravity
-		//for (int i=0; i<physicsEngine.bodies.size(); i++)
-		//{
-		//	physicsEngine.bodies[i].motionState.acceleration += glm::vec2(0, 9.81) * 100.f;
-		//}
+		for (int i=0; i<physicsEngine.bodies.size(); i++)
+		{
+			if(physicsEngine.bodies[i].mass != 0 && physicsEngine.bodies[i].mass != INFINITY)
+				physicsEngine.bodies[i].motionState.acceleration += glm::vec2(0, 9.81) * 100.f;
+		}
 
 		physicsEngine.runSimulation(deltaTime);
 
@@ -171,7 +175,7 @@ bool gameLogic(float deltaTime)
 				b.motionState.pos.y -= diff;
 				b.motionState.lastPos = b.motionState.pos;
 
-				b.motionState.velocity.y = -b.motionState.velocity.y;
+				b.motionState.velocity.y *= -0.9;
 			}
 			
 			if (left < 0)
@@ -179,7 +183,7 @@ bool gameLogic(float deltaTime)
 				b.motionState.pos.x -= left;
 				b.motionState.lastPos = b.motionState.pos;
 
-				b.motionState.velocity.x = -b.motionState.velocity.x;
+				b.motionState.velocity.x *= -0.9;
 			}
 
 			if (right > rightPos)
@@ -187,7 +191,7 @@ bool gameLogic(float deltaTime)
 				b.motionState.pos.x -= right - rightPos;
 				b.motionState.lastPos = b.motionState.pos;
 
-				b.motionState.velocity.x = -b.motionState.velocity.x;
+				b.motionState.velocity.x *= -0.9;
 			}
 
 			if (top < 0)
@@ -195,7 +199,7 @@ bool gameLogic(float deltaTime)
 				b.motionState.pos.y -= top;
 				b.motionState.lastPos = b.motionState.pos;
 				
-				b.motionState.velocity.y = -b.motionState.velocity.y;
+				b.motionState.velocity.y *= -0.9;
 			}
 		}
 	}
