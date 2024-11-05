@@ -273,9 +273,11 @@ namespace ph2d
 		}
 	}
 
-	void updateForces(MotionState &motionState, float mass, float deltaTime)
+	void integrateForces(MotionState &motionState, float mass, float deltaTime)
 	{
 
+
+		//linear motion
 		motionState.acceleration = glm::clamp(motionState.acceleration, 
 			glm::vec2(-MAX_ACCELERATION), glm::vec2(MAX_ACCELERATION));
 
@@ -292,6 +294,13 @@ namespace ph2d
 		if (std::fabs(motionState.velocity.y) < 0.00001) { motionState.velocity.y = 0; }
 
 		motionState.acceleration = {};
+
+
+		//rotation
+		//motionState.angularVelocity += motionState.torque * (1.0f / motionState.momentOfInertia) * deltaTime;
+		//motionState.orientation += motionState.angularVelocity * deltaTime;
+
+
 	}
 
 
@@ -551,7 +560,7 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 
 			}
 
-			updateForces(bodies[i].motionState, 0, deltaTime);
+			integrateForces(bodies[i].motionState, 0, deltaTime);
 			bodies[i].motionState.lastPos = bodies[i].motionState.pos;
 		}
 

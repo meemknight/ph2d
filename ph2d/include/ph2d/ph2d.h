@@ -72,6 +72,10 @@ namespace ph2d
 		glm::vec2 velocity = {};
 		glm::vec2 acceleration = {};
 
+		float orientation = 0; // radians
+		float angularVelocity = 0;
+		float torque = 0;
+
 		void setPos(glm::vec2 p) { pos = p; lastPos = p; }
 	};
 
@@ -116,6 +120,7 @@ namespace ph2d
 		float staticFriction = 0.5;
 		float dynamicFriction = 0.5;
 
+
 		AABB getAABB();
 	};
 
@@ -136,7 +141,7 @@ namespace ph2d
 		void addBody(glm::vec2 centerPos, Collider collider, float mass = 1);
 	};
 
-	void updateForces(MotionState &motionState, float mass, float deltaTime);
+	void integrateForces(MotionState &motionState, float mass, float deltaTime);
 };
 
 
