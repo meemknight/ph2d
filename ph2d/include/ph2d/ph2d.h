@@ -25,7 +25,6 @@ namespace ph2d
 
 	struct AABB
 	{
-
 		AABB() {};
 
 		AABB(glm::vec4 a): pos(a.x, a.y), size(a.z, a.w) {};
@@ -39,12 +38,15 @@ namespace ph2d
 		glm::vec2 max() { return pos + size; }
 		glm::vec2 center() { return pos + size / 2.f; }
 
+		void getMinMaxPointsRotated(glm::vec2 &outMin, glm::vec2 &outMax, float r);
+
+		void rotateAroundCenter(float r);
+
 		float down() { return pos.y + size.y; }
 		float top() { return pos.y; }
 		float left() { return pos.x; }
 		float right() { return pos.x + size.x; }
 	};
-
 
 	struct Circle
 	{
@@ -60,10 +62,19 @@ namespace ph2d
 		AABB getAABB() { return glm::vec4(getTopLeftCorner(), r*2, r*2); }
 	};
 
+	bool OBBvsOBB(AABB a, float ar, AABB b, float br, float &penetration, glm::vec2 &normal);
+
 	bool AABBvsAABB(AABB a, AABB b, float delta = 0);
 
 	bool AABBvsPoint(AABB a, glm::vec2 b, float delta = 0);
 
+	bool OBBvsPoint(AABB a, float rotation, glm::vec2 b, float delta = 0);
+
+	bool CircleVsPoint(glm::vec2 pos, float r, glm::vec2 p, float delta = 0);
+
+	glm::vec2 rotateAroundCenter(glm::vec2 in, float r);
+
+	glm::vec2 rotateAroundPoint(glm::vec2 in, glm::vec2 centerReff, float r);
 
 	struct MotionState
 	{
@@ -72,11 +83,18 @@ namespace ph2d
 		glm::vec2 velocity = {};
 		glm::vec2 acceleration = {};
 
-		float orientation = 0; // radians
+		float rotation = 0; // radians
 		float angularVelocity = 0;
 		float torque = 0;
+		float mass = 1;
+		float momentOfInertia = 1;
 
 		void setPos(glm::vec2 p) { pos = p; lastPos = p; }
+
+		void applyImpulseObjectPosition(glm::vec2 impulse, glm::vec2 contactVector);
+		
+		void applyImpulseWorldPosition(glm::vec2 impulse, glm::vec2 contactVectorWorldPos);
+
 	};
 
 	struct Collider
@@ -95,6 +113,10 @@ namespace ph2d
 		} collider;
 
 		unsigned char type = 0;
+
+		float computeMass();
+
+		float computeMomentOfInertia(float mass);
 	};
 
 	enum ColliderType
@@ -116,12 +138,12 @@ namespace ph2d
 		Collider collider = {};
 
 		float elasticity = 0.2;
-		float mass = 1;
 		float staticFriction = 0.5;
 		float dynamicFriction = 0.5;
 
-
 		AABB getAABB();
+
+		bool intersectPoint(glm::vec2 p, float delta = 0);
 	};
 
 	struct PhysicsEngine
@@ -138,8 +160,10 @@ namespace ph2d
 		float _fixedTimeAccumulated = 0;
 		void runSimulation(float deltaTime);
 
-		void addBody(glm::vec2 centerPos, Collider collider, float mass = 1);
+		void addBody(glm::vec2 centerPos, Collider collider);
 	};
+
+	glm::mat2 rotationMatrix(float angle);
 
 	void integrateForces(MotionState &motionState, float mass, float deltaTime);
 };

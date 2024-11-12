@@ -39,6 +39,46 @@ void normalizeSafe(glm::vec2 &v)
 namespace ph2d
 {
 
+	void AABB::rotateAroundCenter(float r)
+	{
+		glm::vec2 newCenter = ph2d::rotateAroundCenter(center(), r);
+		pos = newCenter - size / 2.f;
+	}
+
+	void AABB::getMinMaxPointsRotated(glm::vec2 &outMin, glm::vec2 &outMax, float r)
+	{
+		glm::vec2 minPoint = min();
+		glm::vec2 maxPoint = max();
+		glm::vec2 point3 = {minPoint.x, maxPoint.y};
+		glm::vec2 point4 = {maxPoint.x, minPoint.y};
+
+		glm::vec2 centerP = center();
+
+		minPoint = ph2d::rotateAroundPoint(minPoint, centerP, r);
+		maxPoint = ph2d::rotateAroundPoint(maxPoint, centerP, r);
+		point3 = ph2d::rotateAroundPoint(point3, centerP, r);
+		point4 = ph2d::rotateAroundPoint(point4, centerP, r);
+
+		outMin = minPoint;
+		if (maxPoint.x < outMin.x) { outMin.x = maxPoint.x; }
+		if (point3.x < outMin.x) { outMin.x = point3.x; }
+		if (point4.x < outMin.x) { outMin.x = point4.x; }
+
+		if (maxPoint.y < outMin.y) { outMin.y = maxPoint.y; }
+		if (point3.y < outMin.y) { outMin.y = point3.y; }
+		if (point4.y < outMin.y) { outMin.y = point4.y; }
+
+		outMax = minPoint;
+		if (maxPoint.x > outMax.x) { outMax.x = maxPoint.x; }
+		if (point3.x > outMax.x) { outMax.x = point3.x; }
+		if (point4.x > outMax.x) { outMax.x = point4.x; }
+
+		if (maxPoint.y > outMax.y) { outMax.y = maxPoint.y; }
+		if (point3.y > outMax.y) { outMax.y = point3.y; }
+		if (point4.y > outMax.y) { outMax.y = point4.y; }
+
+	}
+
 	//The second is the circle
 	bool AABBvsCircle(AABB abox, AABB bbox, float &penetration,
 		glm::vec2 &normal)
@@ -204,6 +244,68 @@ namespace ph2d
 		return false;
 	}
 
+	//a is aabb and b has a rotation
+	bool AABBvsOBB(AABB a, AABB b, float br,
+		float &penetration, glm::vec2 &normal)
+	{
+
+		glm::vec2 aMin = a.min();
+		glm::vec2 aMax = a.max();
+
+		glm::vec2 bMin = {};
+		glm::vec2 bMax = {};
+		b.getMinMaxPointsRotated(bMin, bMax, br);
+
+
+		if (aMax.x < bMin.x || aMin.x > bMax.x) return false;
+		if (aMax.y < bMin.y || aMin.y > bMax.y) return false;
+
+		//return true;
+
+		//passed first axis test, try the other one
+		{
+			ph2d::AABB newA = a;
+			ph2d::AABB newB = b;
+			float newRotationA = -br;
+
+			glm::vec2 bCenter = b.center();
+			newA.pos -= bCenter;
+			newB.pos -= bCenter;
+
+			newA.rotateAroundCenter(newRotationA);
+
+			glm::vec2 aMin = {};
+			glm::vec2 aMax = {};
+			glm::vec2 bMin = newB.min();
+			glm::vec2 bMax = newB.max();
+
+			newA.getMinMaxPointsRotated(aMin, aMax, newRotationA);
+
+			if (aMax.x < bMin.x || aMin.x > bMax.x) return false;
+			if (aMax.y < bMin.y || aMin.y > bMax.y) return false;
+		}
+
+		//compute the intersection normal and penetration here!
+
+		return true;
+
+	}
+
+	bool OBBvsOBB(AABB a, float ar, AABB b, float br,
+		float &penetration, glm::vec2 &normal)
+	{
+		//move A in center.
+		glm::vec2 aPos = a.center();
+		a.pos -= aPos;
+		b.pos -= aPos;
+
+		//we rotate both cubes so now a is axis aligned
+		b.rotateAroundCenter(-ar);
+		br -= ar;
+
+		return AABBvsOBB(a, b, br, penetration, normal);
+	}
+
 
 	bool AABBvsAABB(AABB a, AABB b, float delta)
 	{
@@ -234,6 +336,48 @@ namespace ph2d
 		return false;
 	}
 
+	glm::vec2 rotateAroundCenter(glm::vec2 in, float r)
+	{
+		float c = std::cos(-r);
+		float s = std::sin(-r);
+		return glm::vec2(in.x * c - in.y * s, in.x * s + in.y * c);
+	}
+
+	glm::vec2 rotateAroundPoint(glm::vec2 in, glm::vec2 centerReff, float r)
+	{
+		in -= centerReff;
+		in = rotateAroundCenter(in, r);
+		in += centerReff;
+
+		return in;
+	}
+
+	bool OBBvsPoint(AABB a, float rotation, glm::vec2 b, float delta)
+	{
+		if (rotation == 0)
+		{
+			return AABBvsPoint(a, b, delta);
+		}
+
+		//moved the cube in the center of the screen.
+		glm::vec2 pos = a.center();
+		a.pos -= pos;
+		b -= pos;
+
+		b = rotateAroundCenter(b, -rotation);
+
+		return AABBvsPoint(a, b, delta);
+	}
+
+	bool CircleVsPoint(glm::vec2 pos, float r, glm::vec2 p, float delta)
+	{
+		glm::vec2 dist = pos - p;
+
+		float rSquared = (r + delta) * (r + delta);
+		float distSquared = glm::dot(dist, dist);
+
+		return distSquared < rSquared;
+	}
 
 	bool CirclevsCircle(Circle a, Circle b,
 		float &penetration,
@@ -257,6 +401,7 @@ namespace ph2d
 		return rez;
 	}
 
+	//todo make sure drag can't be stronger than speed!
 	void applyDrag(MotionState &motionState)
 	{
 		glm::vec2 dragForce = 0.1f * -motionState.velocity * glm::abs(motionState.velocity) / 2.f;
@@ -275,7 +420,6 @@ namespace ph2d
 
 	void integrateForces(MotionState &motionState, float mass, float deltaTime)
 	{
-
 
 		//linear motion
 		motionState.acceleration = glm::clamp(motionState.acceleration, 
@@ -296,13 +440,30 @@ namespace ph2d
 		motionState.acceleration = {};
 
 
+		float inverseMomentOfInertia = 0;
+		if (!(motionState.momentOfInertia == 0 || motionState.momentOfInertia == INFINITY))
+		{
+			inverseMomentOfInertia = 1.0f / motionState.momentOfInertia;
+		}
+
 		//rotation
-		//motionState.angularVelocity += motionState.torque * (1.0f / motionState.momentOfInertia) * deltaTime;
-		//motionState.orientation += motionState.angularVelocity * deltaTime;
-
-
+		motionState.angularVelocity += motionState.torque * inverseMomentOfInertia * deltaTime;
+		motionState.rotation += motionState.angularVelocity * deltaTime;
+		motionState.torque = 0;
 	}
 
+
+	glm::mat2 rotationMatrix(float angle)
+	{
+		float c = cos(angle);
+		float s = sin(angle);
+
+		return glm::mat2(
+			{
+				c, -s,
+				s, c
+			});
+	}
 
 	Collider createBoxCollider(glm::vec2 size)
 	{
@@ -324,6 +485,42 @@ namespace ph2d
 		return c;
 	}
 
+	float Collider::computeMass()
+	{
+		switch (type)
+		{
+
+		case ColliderCircle:
+		return (collider.circle.radius * collider.circle.radius * 3.1415);
+		
+		case ColliderBox:
+		return collider.box.size.x * collider.box.size.y;
+
+		default:
+		return 0;
+
+		}
+	}
+
+	float Collider::computeMomentOfInertia(float mass)
+	{
+		switch (type)
+		{
+
+		case ColliderCircle:
+		return (collider.circle.radius * collider.circle.radius * mass * 0.5f);
+
+		case ColliderBox:
+		return mass * (collider.box.size.x * collider.box.size.x + 
+			collider.box.size.y * collider.box.size.y) * (1.f/12.f);
+
+		default:
+		return 0;
+		}
+
+	}
+
+
 };
 
 float PythagoreanSolve(float fA, float fB)
@@ -339,6 +536,37 @@ bool overlap(ph2d::Body &a, ph2d::Body &b)
 	//todo
 	return 0;
 }
+
+float cross(glm::vec2 a, glm::vec2 b)
+{
+	return a.x * b.y - a.y * b.x;
+}
+
+// More exotic (but necessary) forms of the cross product
+// with a vector a and scalar s, both returning a vector
+glm::vec2 cross(glm::vec2 a, float s)
+{
+	return glm::vec2(s * a.y, -s * a.x);
+}
+
+glm::vec2 cross(float s, glm::vec2 a)
+{
+	return glm::vec2(-s * a.y, s * a.x);
+}
+
+
+void ph2d::MotionState::applyImpulseObjectPosition(glm::vec2 impulse, glm::vec2 contactVector)
+{
+	velocity += (1.0f / mass) * impulse;
+	angularVelocity -= (1.0f / momentOfInertia) * cross(contactVector, impulse);
+}
+
+void ph2d::MotionState::applyImpulseWorldPosition(glm::vec2 impulse, glm::vec2 contactVectorWorldPos)
+{
+	glm::vec2 relVector = contactVectorWorldPos - pos;
+	applyImpulseObjectPosition(impulse, relVector);
+}
+
 
 
 void ph2d::PhysicsEngine::runSimulation(float deltaTime)
@@ -418,11 +646,11 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 			//calculate elasticity
 			float e = std::min(A.elasticity, B.elasticity);
 
-			float massInverseA = 1.f / A.mass;
-			float massInverseB = 1.f / B.mass;
+			float massInverseA = 1.f / A.motionState.mass;
+			float massInverseB = 1.f / B.motionState.mass;
 
-			if (A.mass == 0 || A.mass == INFINITY) { massInverseA = 0; }
-			if (B.mass == 0 || B.mass == INFINITY) { massInverseB = 0; }
+			if (A.motionState.mass == 0 || A.motionState.mass == INFINITY) { massInverseA = 0; }
+			if (B.motionState.mass == 0 || B.motionState.mass == INFINITY) { massInverseB = 0; }
 
 			// Calculate impulse scalar
 			float j = -(1.f + e) * velAlongNormal;
@@ -464,7 +692,7 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 			//for(int _ = 0; _ < 4; _++)
 			for (int j = 0; j < bodiesSize; j++)
 			{
-
+				break;
 				if (i == j) { continue; }
 
 				auto &A = bodies[i];
@@ -569,13 +797,14 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 }
 
 
-void ph2d::PhysicsEngine::addBody(glm::vec2 centerPos, Collider collider, float mass)
+void ph2d::PhysicsEngine::addBody(glm::vec2 centerPos, Collider collider)
 {
 
 	Body body;
 	body.motionState.setPos(centerPos);
 	body.collider = collider;
-	body.mass = mass;
+	body.motionState.mass = collider.computeMass();
+	body.motionState.momentOfInertia = collider.computeMomentOfInertia(body.motionState.mass);
 
 	bodies.push_back(body);
 
@@ -625,5 +854,27 @@ ph2d::AABB ph2d::Body::getAABB()
 
 	return {};
 
+}
+
+bool ph2d::Body::intersectPoint(glm::vec2 p, float delta)
+{
+	switch (collider.type)
+	{
+
+	case ColliderCircle:
+	{
+		return CircleVsPoint(motionState.pos, collider.collider.circle.radius, p, delta);
+	};
+	break;
+
+	case ColliderBox:
+	{
+		return OBBvsPoint(getAABB(), motionState.rotation, p, delta);
+	}
+	break;
+
+	}
+
+	return {};
 }
 
