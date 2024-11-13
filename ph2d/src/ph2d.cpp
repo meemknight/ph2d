@@ -100,7 +100,7 @@ namespace ph2d
 
 	//The second is the circle
 	bool AABBvsCircle(AABB abox, AABB bbox, float &penetration,
-		glm::vec2 &normal)
+		glm::vec2 &normal, glm::vec2 &contactPoint)
 	{
 		normal = {};
 		// Vector from A to B
@@ -176,14 +176,18 @@ namespace ph2d
 		{
 			normal = -normal2;
 			penetration = d - r;
+			normalizeSafe(normal);
+			contactPoint = bbox.center() + (-normal * (r - penetration * 0.5f));
 		}
 		else
 		{
 			normal = normal2;
 			penetration = r - d;
+			normalizeSafe(normal);
+			contactPoint = bbox.center() + (-normal * (r - penetration * 0.5f));
 		}
 
-		normalizeSafe(normal);
+
 
 		return true;
 	}
@@ -213,10 +217,10 @@ namespace ph2d
 
 	//The second is the circle
 	bool OBBvsCircle(AABB abox, float ar, AABB bbox, float &penetration,
-		glm::vec2 &normal)
+		glm::vec2 &normal, glm::vec2 &contactPoint)
 	{
 		
-		if(ar == 0){ return AABBvsCircle(abox, bbox, penetration, normal); }
+		if(ar == 0){ return AABBvsCircle(abox, bbox, penetration, normal, contactPoint); }
 
 		glm::vec2 centerA = abox.center();
 
@@ -225,10 +229,12 @@ namespace ph2d
 
 		bbox.rotateAroundCenter(-ar);
 
-		bool rez = AABBvsCircle(abox, bbox, penetration, normal);
+		bool rez = AABBvsCircle(abox, bbox, penetration, normal, contactPoint);
 
 		normal = rotateAroundCenter(normal, ar);
 		normalizeSafe(normal);
+		contactPoint = rotateAroundCenter(contactPoint, ar);
+		contactPoint += centerA;
 
 		return rez;
 	}
@@ -737,10 +743,10 @@ void ph2d::MotionState::applyImpulseObjectPosition(glm::vec2 impulse, glm::vec2 
 		velocity += (1.0f / mass) * impulse;
 	}
 
-	//if (momentOfInertia != 0 && momentOfInertia != INFINITY)
-	//{
-	//	angularVelocity -= (1.0f / momentOfInertia) * cross(contactVector, impulse);
-	//}
+	if (momentOfInertia != 0 && momentOfInertia != INFINITY)
+	{
+		angularVelocity -= (1.0f / momentOfInertia) * cross(contactVector, impulse);
+	}
 }
 
 void ph2d::MotionState::applyImpulseWorldPosition(glm::vec2 impulse, glm::vec2 contactVectorWorldPos)
@@ -801,15 +807,20 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 			float aInverseMass, float bInverseMass, float j, glm::vec2 rContactA,
 			glm::vec2 rContactB, glm::vec2 contactPoint)
 		{
+
+			float momentOfInertiaInverseA = 1.f / A.motionState.momentOfInertia;
+			float momentOfInertiaInverseB = 1.f / B.motionState.momentOfInertia;
+			if (A.motionState.momentOfInertia == 0 || A.motionState.momentOfInertia == INFINITY) { momentOfInertiaInverseA = 0; }
+			if (B.motionState.momentOfInertia == 0 || B.motionState.momentOfInertia == INFINITY) { momentOfInertiaInverseB = 0; }
+
+
 			// Solve for magnitude to apply along the friction vector
 			float jt = -glm::dot(rv, tangent);
-			jt = jt / (aInverseMass + bInverseMass);
-				
-				//todo add back
-				//+
-				//(std::pow(cross(rContactA, rv), 2) / A.motionState.momentOfInertia) +
-				//(std::pow(cross(rContactB, rv), 2) / B.motionState.momentOfInertia)
-				//;
+			jt = jt / (aInverseMass + bInverseMass)
+				+
+				(std::pow(cross(rContactA, rv), 2) * momentOfInertiaInverseA) +
+				(std::pow(cross(rContactB, rv), 2) * momentOfInertiaInverseB)
+				;
 
 			// PythagoreanSolve = A^2 + B^2 = C^2, solving for C given A and B
 			// Use to approximate mu given friction coefficients of each body
@@ -832,8 +843,8 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 			//A.motionState.velocity -= (aInverseMass)*frictionImpulse;
 			//B.motionState.velocity += (bInverseMass)*frictionImpulse;
 
-			A.motionState.applyImpulseWorldPosition(-frictionImpulse, contactPoint);
-			B.motionState.applyImpulseWorldPosition( frictionImpulse, contactPoint);
+			//A.motionState.applyImpulseWorldPosition(-frictionImpulse, contactPoint);
+			//B.motionState.applyImpulseWorldPosition( frictionImpulse, contactPoint);
 
 
 		};
@@ -859,11 +870,12 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 			glm::vec2 rContactA = contactPoint - A.motionState.pos;
 			glm::vec2 rContactB = contactPoint - B.motionState.pos;
 
-			//float inertiaDivisorA = std::pow(cross(rContactA, normal), 2) * momentOfInertiaInverseA;
-			//float inertiaDivisorB = std::pow(cross(rContactB, normal), 2) * momentOfInertiaInverseB;
+			
+			//float inertiaDivisorA = 0;
+			//float inertiaDivisorB = 0;
 
-			float inertiaDivisorA = 0;
-			float inertiaDivisorB = 0;
+			float inertiaDivisorA = std::pow(cross(rContactA, normal), 2) * momentOfInertiaInverseA;
+			float inertiaDivisorB = std::pow(cross(rContactB, normal), 2) * momentOfInertiaInverseB;
 
 			if (massInverseA == 0 && massInverseB == 0
 				&& inertiaDivisorA == 0 && inertiaDivisorB == 0
@@ -924,7 +936,7 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 			for(int _ = 0; _ < collisionChecksCount; _++)
 			for (int j = 0; j < bodiesSize; j++)
 			{
-				//break;
+				break;
 				if (i == j) { continue; }
 
 				auto &A = bodies[i];
@@ -1010,7 +1022,7 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 					float penetration = 0;
 
 					if (ph2d::OBBvsCircle(
-						abox, A.motionState.rotation, bbox, penetration, normal))
+						abox, A.motionState.rotation, bbox, penetration, normal, contactPoint))
 					{
 						glm::vec2 relativeVelocity = B.motionState.velocity -
 							A.motionState.velocity;

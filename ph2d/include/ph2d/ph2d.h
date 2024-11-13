@@ -87,7 +87,8 @@ namespace ph2d
 
 	bool HalfSpaceVSCircle(LineEquation line, AABB circle, float &penetration, glm::vec2 &normal, glm::vec2 &contactPoint);
 
-	bool OBBvsCircle(AABB abox, float ar, AABB bbox, float &penetration, glm::vec2 &normal);
+	bool OBBvsCircle(AABB abox, float ar, AABB bbox, float &penetration, glm::vec2 &normal, 
+		glm::vec2 &contactPoint);
 
 	bool CirclevsCircle(Circle a, Circle b,
 		float &penetration,

@@ -57,8 +57,8 @@ bool initGame()
 	//physicsEngine.addBody({500, 500}, ph2d::createBoxCollider({300, 300}));
 	
 	
-	//physicsEngine.addBody({600, 600}, ph2d::createBoxCollider({350, 100}));
-	//physicsEngine.bodies[1].motionState.rotation = glm::radians(30.f);
+	physicsEngine.addBody({600, 600}, ph2d::createBoxCollider({350, 100}));
+	//physicsEngine.bodies[0].motionState.rotation = glm::radians(30.f);
 
 	physicsEngine.addBody({500, 500}, ph2d::createCircleCollider({55}));
 	//physicsEngine.addBody({800, 100}, ph2d::createCircleCollider({55}));
@@ -139,7 +139,7 @@ bool gameLogic(float deltaTime)
 
 	ImGui::DragInt("Speed", &simulationSpeed);
 
-	//ImGui::SliderAngle("ANgle", &physicsEngine.bodies[0].motionState.rotation);
+	ImGui::SliderAngle("ANgle", &physicsEngine.bodies[0].motionState.rotation);
 
 	ImGui::End();
 	ImGui::PopStyleColor();
@@ -147,7 +147,7 @@ bool gameLogic(float deltaTime)
 	static int selected = -1;
 
 	//mouse
-	//physicsEngine.bodies[0].motionState.setPos(platform::getRelMousePosition());
+	physicsEngine.bodies[0].motionState.setPos(platform::getRelMousePosition());
 
 	static glm::vec2 pressedPosition = {};
 
@@ -182,6 +182,7 @@ bool gameLogic(float deltaTime)
 
 		physicsEngine.bodies[selected].motionState.applyImpulseWorldPosition(force, 
 			physicsEngine.bodies[selected].motionState.pos
+			//pressedPosition
 			);
 
 		//physicsEngine.bodies[selected].motionState.angularVelocity = 10;
@@ -195,11 +196,11 @@ bool gameLogic(float deltaTime)
 	{
 
 		//gravity
-		for (int i=0; i<physicsEngine.bodies.size(); i++)
-		{
-			if(physicsEngine.bodies[i].motionState.mass != 0 && physicsEngine.bodies[i].motionState.mass != INFINITY)
-				physicsEngine.bodies[i].motionState.acceleration += glm::vec2(0, 9.81) * 100.f;
-		}
+		//for (int i=0; i<physicsEngine.bodies.size(); i++)
+		//{
+		//	if(physicsEngine.bodies[i].motionState.mass != 0 && physicsEngine.bodies[i].motionState.mass != INFINITY)
+		//		physicsEngine.bodies[i].motionState.acceleration += glm::vec2(0, 9.81) * 100.f;
+		//}
 
 		physicsEngine.runSimulation(deltaTime);
 
@@ -255,13 +256,13 @@ bool gameLogic(float deltaTime)
 	bool penetrated = 0;
 	glm::vec2 contactPoint = {};
 
-	//if (ph2d::OBBvsCircle(physicsEngine.bodies[0].getAABB(),
-	//	physicsEngine.bodies[0].motionState.rotation,
-	//	physicsEngine.bodies[1].getAABB(),
-	//	p, n))
-	//{
-	//	penetrated = true;
-	//}
+	if (ph2d::OBBvsCircle(physicsEngine.bodies[0].getAABB(),
+		physicsEngine.bodies[0].motionState.rotation,
+		physicsEngine.bodies[1].getAABB(),
+		p, n, contactPoint))
+	{
+		penetrated = true;
+	}
 
 	//if (ph2d::OBBvsOBB(physicsEngine.bodies[0].getAABB(),
 	//	physicsEngine.bodies[0].motionState.rotation,
