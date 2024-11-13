@@ -803,10 +803,13 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 		{
 			// Solve for magnitude to apply along the friction vector
 			float jt = -glm::dot(rv, tangent);
-			jt = jt / (aInverseMass + bInverseMass) +
-				(std::pow(cross(rContactA, rv), 2) / A.motionState.momentOfInertia) +
-				(std::pow(cross(rContactB, rv), 2) / B.motionState.momentOfInertia)
-				;
+			jt = jt / (aInverseMass + bInverseMass);
+				
+				//todo add back
+				//+
+				//(std::pow(cross(rContactA, rv), 2) / A.motionState.momentOfInertia) +
+				//(std::pow(cross(rContactB, rv), 2) / B.motionState.momentOfInertia)
+				//;
 
 			// PythagoreanSolve = A^2 + B^2 = C^2, solving for C given A and B
 			// Use to approximate mu given friction coefficients of each body
@@ -896,10 +899,16 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 				// Solve for the tangent vector
 				glm::vec2 tangent = rv - glm::dot(rv, normal) * normal;
 
-				normalizeSafe(tangent);
+				float rangentSize = glm::length(tangent);
 				
-				applyFriction(A, B, tangent, rv, massInverseA, massInverseB, j,
-					rContactA, rContactB, contactPoint);
+				if (rangentSize > 0.001)
+				{
+					tangent /= rangentSize;
+
+					applyFriction(A, B, tangent, rv, massInverseA, massInverseB, j,
+						rContactA, rContactB, contactPoint);
+				}
+
 			}
 
 

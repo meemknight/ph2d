@@ -79,7 +79,9 @@ bool initGame()
 	//std::cout << ph2d::rotationToVector(ph2d::vectorToRotation({1,0}) ).x << " " << ph2d::rotationToVector(ph2d::vectorToRotation({1,0}) ).y  << "\n";
 
 	physicsEngine.addHalfSpaceStaticObject({0, floorPos}, {0, 1});
-
+	//physicsEngine.addBody({500, floorPos}, ph2d::createBoxCollider({900, 50}));
+	//physicsEngine.bodies.back().motionState.mass = 0;
+	//physicsEngine.bodies.back().motionState.momentOfInertia = 0;
 
 	return true;
 }
