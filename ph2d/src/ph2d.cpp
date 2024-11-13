@@ -189,7 +189,7 @@ namespace ph2d
 	}
 
 	bool HalfSpaceVSCircle(LineEquation line, AABB circle, float &penetration,
-		glm::vec2 &normal)
+		glm::vec2 &normal, glm::vec2 &contactPoint)
 	{
 		float r = circle.size.x / 2.f;
 		
@@ -197,12 +197,14 @@ namespace ph2d
 
 		normal = -line.getNormal();
 
-		float distance = line.computeEquation(circle.center());
+		glm::vec2 center = circle.center();
+		float distance = line.computeEquation(center);
 
 		penetration = r + distance;
 
 		if (penetration > 0)
 		{
+			contactPoint = center + (-normal * (r - penetration * 0.5f));
 			return 1;
 		}
 
@@ -827,8 +829,8 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 			//A.motionState.velocity -= (aInverseMass)*frictionImpulse;
 			//B.motionState.velocity += (bInverseMass)*frictionImpulse;
 
-			A.motionState.applyImpulseWorldPosition(aInverseMass * -frictionImpulse, contactPoint);
-			B.motionState.applyImpulseWorldPosition(bInverseMass *  frictionImpulse, contactPoint);
+			A.motionState.applyImpulseWorldPosition(-frictionImpulse, contactPoint);
+			B.motionState.applyImpulseWorldPosition( frictionImpulse, contactPoint);
 
 
 		};
@@ -880,8 +882,8 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 			//A.motionState.velocity -= massInverseA * impulse;
 			//B.motionState.velocity += massInverseB * impulse;
 
-			A.motionState.applyImpulseWorldPosition(massInverseA * -impulse, contactPoint);
-			B.motionState.applyImpulseWorldPosition(massInverseB *  impulse, contactPoint);
+			A.motionState.applyImpulseWorldPosition(-impulse, contactPoint);
+			B.motionState.applyImpulseWorldPosition( impulse, contactPoint);
 
 			{
 
@@ -896,8 +898,8 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 
 				normalizeSafe(tangent);
 				
-				//applyFriction(A, B, tangent, rv, massInverseA, massInverseB, j,
-				//	rContactA, rContactB, contactPoint);
+				applyFriction(A, B, tangent, rv, massInverseA, massInverseB, j,
+					rContactA, rContactB, contactPoint);
 			}
 
 
@@ -1035,7 +1037,7 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 						A.motionState.pos);
 
 					if (ph2d::HalfSpaceVSCircle(
-						lineEquation, bbox, penetration, normal))
+						lineEquation, bbox, penetration, normal, contactPoint))
 					{
 						glm::vec2 relativeVelocity = B.motionState.velocity -
 							A.motionState.velocity;

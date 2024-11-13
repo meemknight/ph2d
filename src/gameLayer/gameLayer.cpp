@@ -50,7 +50,6 @@ bool initGame()
 	}
 
 
-	physicsEngine.addHalfSpaceStaticObject({0, floorPos}, {0, 1});
 
 	//physicsEngine.addBody({500, 1100}, 
 	//	ph2d::createBoxCollider({1100, 10}));
@@ -58,7 +57,7 @@ bool initGame()
 	//physicsEngine.addBody({500, 500}, ph2d::createBoxCollider({300, 300}));
 	
 	
-	physicsEngine.addBody({600, 600}, ph2d::createBoxCollider({350, 100}));
+	//physicsEngine.addBody({600, 600}, ph2d::createBoxCollider({350, 100}));
 	//physicsEngine.bodies[1].motionState.rotation = glm::radians(30.f);
 
 	physicsEngine.addBody({500, 500}, ph2d::createCircleCollider({55}));
@@ -78,6 +77,9 @@ bool initGame()
 	//std::cout << ph2d::rotationToVector(ph2d::vectorToRotation({-1,0})).x << " " << ph2d::rotationToVector(ph2d::vectorToRotation({-1,0})).y << "\n";
 	//std::cout << ph2d::rotationToVector(ph2d::vectorToRotation({0,-1})).x << " " << ph2d::rotationToVector(ph2d::vectorToRotation({0,-1})).y << "\n";
 	//std::cout << ph2d::rotationToVector(ph2d::vectorToRotation({1,0}) ).x << " " << ph2d::rotationToVector(ph2d::vectorToRotation({1,0}) ).y  << "\n";
+
+	physicsEngine.addHalfSpaceStaticObject({0, floorPos}, {0, 1});
+
 
 	return true;
 }
@@ -191,11 +193,11 @@ bool gameLogic(float deltaTime)
 	{
 
 		//gravity
-		//for (int i=0; i<physicsEngine.bodies.size(); i++)
-		//{
-		//	if(physicsEngine.bodies[i].motionState.mass != 0 && physicsEngine.bodies[i].motionState.mass != INFINITY)
-		//		physicsEngine.bodies[i].motionState.acceleration += glm::vec2(0, 9.81) * 100.f;
-		//}
+		for (int i=0; i<physicsEngine.bodies.size(); i++)
+		{
+			if(physicsEngine.bodies[i].motionState.mass != 0 && physicsEngine.bodies[i].motionState.mass != INFINITY)
+				physicsEngine.bodies[i].motionState.acceleration += glm::vec2(0, 9.81) * 100.f;
+		}
 
 		physicsEngine.runSimulation(deltaTime);
 
@@ -273,6 +275,17 @@ bool gameLogic(float deltaTime)
 	//ph2d::Circle a1 = glm::vec3{a.center(),a.size.x / 2};
 	//ph2d::Circle b1 = glm::vec3{b.center(),b.size.x / 2};
 	//if (ph2d::CirclevsCircle(a1, b1, p, n, contactPoint))
+	//{
+	//	penetrated = true;
+	//}
+
+
+	//auto a = physicsEngine.bodies[0].getAABB();
+	//auto b = physicsEngine.bodies[1];
+	//ph2d::LineEquation lineEquation;
+	//lineEquation.createFromRotationAndPoint(b.motionState.rotation,
+	//	b.motionState.pos);
+	//if (ph2d::HalfSpaceVSCircle(lineEquation, a, p, n, contactPoint))
 	//{
 	//	penetrated = true;
 	//}
@@ -361,8 +374,9 @@ bool gameLogic(float deltaTime)
 	//lineEquationStart -= lineEquation.getLineVector() * 1000.f;
 	//renderer.renderLine(lineEquationStart, lineEquationStart + lineEquation.getLineVector() * 2000.f, Colors_Red);
 
-	ph2d::LineEquation lineEquation;
-	lineEquation.createFromNormalAndPoint({0,1}, {0, floorPos});
+
+	//ph2d::LineEquation lineEquation;
+	//lineEquation.createFromNormalAndPoint({0,1}, {0, floorPos});
 
 	//float pl = 0;
 	//pl = lineEquation.computeEquation(platform::getRelMousePosition());

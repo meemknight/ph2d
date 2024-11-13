@@ -22,6 +22,7 @@
 
 namespace ph2d
 {
+	struct LineEquation;
 
 
 	glm::vec2 rotationToVector(float rotation);
@@ -83,6 +84,8 @@ namespace ph2d
 	bool OBBvsPoint(AABB a, float rotation, glm::vec2 b, float delta = 0);
 
 	bool CircleVsPoint(glm::vec2 pos, float r, glm::vec2 p, float delta = 0);
+
+	bool HalfSpaceVSCircle(LineEquation line, AABB circle, float &penetration, glm::vec2 &normal, glm::vec2 &contactPoint);
 
 	bool OBBvsCircle(AABB abox, float ar, AABB bbox, float &penetration, glm::vec2 &normal);
 
@@ -237,7 +240,7 @@ namespace ph2d
 
 		Collider collider = {};
 
-		float elasticity = 0.9;
+		float elasticity = 0.2;
 		float staticFriction = 0.5;
 		float dynamicFriction = 0.4;
 
