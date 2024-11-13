@@ -79,11 +79,30 @@ namespace ph2d
 
 	}
 
+	void AABB::getCornersRotated(glm::vec2 corners[4], float r)
+	{
+		corners[0] = min();
+		corners[1] = max();
+		corners[2] = {corners[0].x, corners[1].y};
+		corners[3] = {corners[1].x, corners[0].y};
+
+		glm::vec2 c = center();
+
+		if (r)
+		{
+			corners[0] = rotateAroundPoint(corners[0], c, r);
+			corners[1] = rotateAroundPoint(corners[1], c, r);
+			corners[2] = rotateAroundPoint(corners[2], c, r);
+			corners[3] = rotateAroundPoint(corners[3], c, r);
+		}
+
+	}
+
 	//The second is the circle
 	bool AABBvsCircle(AABB abox, AABB bbox, float &penetration,
 		glm::vec2 &normal)
 	{
-
+		normal = {};
 		// Vector from A to B
 		glm::vec2 n = bbox.center() - abox.center();
 
@@ -155,18 +174,40 @@ namespace ph2d
 		// inside the AABB
 		if (inside)
 		{
-			normal = -n;
-			penetration = r - d;
+			normal = -normal2;
+			penetration = d - r;
 		}
 		else
 		{
-			normal = n;
+			normal = normal2;
 			penetration = r - d;
 		}
 
 		normalizeSafe(normal);
 
 		return true;
+	}
+
+	//The second is the circle
+	bool OBBvsCircle(AABB abox, float ar, AABB bbox, float &penetration,
+		glm::vec2 &normal)
+	{
+		
+		if(ar == 0){ return AABBvsCircle(abox, bbox, penetration, normal); }
+
+		glm::vec2 centerA = abox.center();
+
+		abox.pos -= centerA;
+		bbox.pos -= centerA;
+
+		bbox.rotateAroundCenter(-ar);
+
+		bool rez = AABBvsCircle(abox, bbox, penetration, normal);
+
+		normal = rotateAroundCenter(normal, ar);
+		normalizeSafe(normal);
+
+		return rez;
 	}
 
 
@@ -244,9 +285,54 @@ namespace ph2d
 		return false;
 	}
 
+	float calculatePenetrationAlongOneAxe(glm::vec2 *aPoints, size_t aPointsCount,
+		glm::vec2 *bPoints, size_t bPointsCount, glm::vec2 axeDirection, bool *flipSign)
+	{
+
+		if (aPointsCount <= 0 || bPointsCount <= 0 || !aPoints || !bPoints) { return 0; }
+
+		float d0a = glm::dot(aPoints[0], axeDirection);
+		float d0b = glm::dot(bPoints[0], axeDirection);
+
+		float aMin = d0a;
+		float aMax = d0a;
+		float bMin = d0b;
+		float bMax = d0b;
+
+		for (int i = 1; i < aPointsCount; i++)
+		{
+			glm::vec2 p = aPoints[i];
+			float d = glm::dot(p, axeDirection);
+			if (d > aMax) { aMax = d; }
+			if (d < aMin) { aMin = d; }
+		}
+
+		for (int i = 1; i < bPointsCount; i++)
+		{
+			glm::vec2 p = bPoints[i];
+			float d = glm::dot(p, axeDirection);
+			if (d > bMax) { bMax = d; }
+			if (d < bMin) { bMin = d; }
+		}
+
+		// Calculate overlaps
+		float overlapA = aMax - bMin; // Overlap from A to B
+		float overlapB = bMax - aMin; // Overlap from B to A
+
+		if (overlapA < overlapB)
+		{
+			if (flipSign) { *flipSign = 0; }
+			return overlapA;
+		}
+		else
+		{
+			if (flipSign) { *flipSign = 1; }
+			return overlapB;
+		}
+	}
+
 	//a is aabb and b has a rotation
-	bool AABBvsOBB(AABB a, AABB b, float br,
-		float &penetration, glm::vec2 &normal)
+	bool AABBvsOBB(AABB a, AABB b, float br)
 	{
 
 		glm::vec2 aMin = a.min();
@@ -285,14 +371,11 @@ namespace ph2d
 			if (aMax.y < bMin.y || aMin.y > bMax.y) return false;
 		}
 
-		//compute the intersection normal and penetration here!
-
 		return true;
 
 	}
 
-	bool OBBvsOBB(AABB a, float ar, AABB b, float br,
-		float &penetration, glm::vec2 &normal)
+	bool OBBvsOBB(AABB a, float ar, AABB b, float br)
 	{
 		//move A in center.
 		glm::vec2 aPos = a.center();
@@ -303,7 +386,58 @@ namespace ph2d
 		b.rotateAroundCenter(-ar);
 		br -= ar;
 
-		return AABBvsOBB(a, b, br, penetration, normal);
+		return AABBvsOBB(a, b, br);
+	}
+
+	bool OBBvsOBB(AABB a, float ar, AABB b, float br,
+		float &penetration, glm::vec2 &normal)
+	{
+		penetration = 0;
+		normal = {0,0};
+
+		glm::vec2 cornersA[4] = {};
+		glm::vec2 cornersB[4] = {};
+		a.getCornersRotated(cornersA, ar);
+		b.getCornersRotated(cornersB, br);
+
+		glm::vec2 axes[4] = {
+			 rotateAroundCenter({0, 1}, ar), // Normal of A's first edge
+			 rotateAroundCenter({1, 0}, ar), // Normal of A's second edge
+			 rotateAroundCenter({0, 1}, br), // Normal of B's first edge
+			 rotateAroundCenter({1, 0}, br)  // Normal of B's second edge
+		};
+
+		// Initialize the minimum penetration depth
+		float minPenetration = FLT_MAX;
+		glm::vec2 minPenetrationAxis = {};
+		bool flipSign = 0;
+
+		// Test each axis
+		for (int i = 0; i < 4; ++i)
+		{
+			bool flip = 0;
+			float penetrationDepth = calculatePenetrationAlongOneAxe(
+				cornersA, 4, cornersB, 4, axes[i], &flip);
+
+			// If there's no overlap along this axis, shapes are not colliding
+			if (penetrationDepth < 0.0f)
+			{
+				return false; // No collision
+			}
+
+			// Find the axis of least penetration
+			if (penetrationDepth < minPenetration)
+			{
+				minPenetration = penetrationDepth;
+				minPenetrationAxis = axes[i];
+				flipSign = flip;
+			}
+		}
+
+		penetration = minPenetration;
+		normal = glm::normalize(minPenetrationAxis);
+		if (flipSign) { normal = -normal; }
+		return true;
 	}
 
 
@@ -600,7 +734,7 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 			float penetrationDepth, float aInverseMass, float bInverseMass)
 		{
 
-			const float percent = 0.25; // usually 20% to 80%
+			const float percent = 0.40; // usually 20% to 80%
 			const float slop = 0.01; // usually 0.01 to 0.1 
 
 			glm::vec2 correction = (glm::max(penetrationDepth - slop, 0.0f) / (aInverseMass + bInverseMass)) * percent * n;
@@ -689,10 +823,10 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 			//applyDrag(bodies[i].motionState);
 
 			//detect colisions
-			//for(int _ = 0; _ < 4; _++)
+			for(int _ = 0; _ < collisionChecksCount; _++)
 			for (int j = 0; j < bodiesSize; j++)
 			{
-				break;
+				//break;
 				if (i == j) { continue; }
 
 				auto &A = bodies[i];
@@ -736,8 +870,10 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 					glm::vec2 normal = {};
 					float penetration = 0;
 
-					if (ph2d::AABBvsAABB(
-						abox, bbox, penetration, normal))
+					if (ph2d::OBBvsOBB(
+						abox, A.motionState.rotation, bbox, 
+						B.motionState.rotation,
+						penetration, normal))
 					{
 
 						glm::vec2 relativeVelocity = B.motionState.velocity -
@@ -766,8 +902,8 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 					glm::vec2 normal = {};
 					float penetration = 0;
 
-					if (ph2d::AABBvsCircle(
-						abox, bbox, penetration, normal))
+					if (ph2d::OBBvsCircle(
+						abox, A.motionState.rotation, bbox, penetration, normal))
 					{
 						glm::vec2 relativeVelocity = B.motionState.velocity -
 							A.motionState.velocity;

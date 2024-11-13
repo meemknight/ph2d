@@ -40,6 +40,9 @@ namespace ph2d
 
 		void getMinMaxPointsRotated(glm::vec2 &outMin, glm::vec2 &outMax, float r);
 
+		void getCornersRotated(glm::vec2 corners[4], float r);
+
+
 		void rotateAroundCenter(float r);
 
 		float down() { return pos.y + size.y; }
@@ -62,6 +65,8 @@ namespace ph2d
 		AABB getAABB() { return glm::vec4(getTopLeftCorner(), r*2, r*2); }
 	};
 
+	bool OBBvsOBB(AABB a, float ar, AABB b, float br);
+
 	bool OBBvsOBB(AABB a, float ar, AABB b, float br, float &penetration, glm::vec2 &normal);
 
 	bool AABBvsAABB(AABB a, AABB b, float delta = 0);
@@ -71,6 +76,11 @@ namespace ph2d
 	bool OBBvsPoint(AABB a, float rotation, glm::vec2 b, float delta = 0);
 
 	bool CircleVsPoint(glm::vec2 pos, float r, glm::vec2 p, float delta = 0);
+
+	bool OBBvsCircle(AABB abox, float ar, AABB bbox, float &penetration, glm::vec2 &normal);
+
+	float calculatePenetrationAlongOneAxe(glm::vec2 *aPoints, size_t aPointsCount,
+		glm::vec2 *bPoints, size_t bPointsCount, glm::vec2 axeDirection, bool *flipSign = 0);
 
 	glm::vec2 rotateAroundCenter(glm::vec2 in, float r);
 
@@ -139,7 +149,7 @@ namespace ph2d
 
 		float elasticity = 0.2;
 		float staticFriction = 0.5;
-		float dynamicFriction = 0.5;
+		float dynamicFriction = 0.4;
 
 		AABB getAABB();
 
@@ -154,8 +164,9 @@ namespace ph2d
 		// it is measured in secconds, so if you set it to 0.016, it will be updated 60 times a seccond, 
 		// if you set it to 0.032, it will be updated 30 times a seccond, and a smaller number will get a lot more updates!
 		//you can set it to 0 if you want it to just update with the deltaTime;
-		float setFixedTimeStamp = 0.008;
+		float setFixedTimeStamp = 0.016;
 		float maxAccumulated = 0.32;
+		int collisionChecksCount = 8;
 
 		float _fixedTimeAccumulated = 0;
 		void runSimulation(float deltaTime);
