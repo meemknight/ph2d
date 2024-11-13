@@ -23,6 +23,11 @@
 namespace ph2d
 {
 
+
+	glm::vec2 rotationToVector(float rotation);
+
+	float vectorToRotation(const glm::vec2 &vector);
+
 	struct AABB
 	{
 		AABB() {};
@@ -51,6 +56,7 @@ namespace ph2d
 		float right() { return pos.x + size.x; }
 	};
 
+	//todo remove?
 	struct Circle
 	{
 		Circle() {};
@@ -67,7 +73,8 @@ namespace ph2d
 
 	bool OBBvsOBB(AABB a, float ar, AABB b, float br);
 
-	bool OBBvsOBB(AABB a, float ar, AABB b, float br, float &penetration, glm::vec2 &normal);
+	bool OBBvsOBB(AABB a, float ar, AABB b, float br, float &penetration, 
+		glm::vec2 &normal, glm::vec2 &contactPoint);
 
 	bool AABBvsAABB(AABB a, AABB b, float delta = 0);
 
@@ -78,6 +85,10 @@ namespace ph2d
 	bool CircleVsPoint(glm::vec2 pos, float r, glm::vec2 p, float delta = 0);
 
 	bool OBBvsCircle(AABB abox, float ar, AABB bbox, float &penetration, glm::vec2 &normal);
+
+	bool CirclevsCircle(Circle a, Circle b,
+		float &penetration,
+		glm::vec2 &normal, glm::vec2 &contactPoint);
 
 	float calculatePenetrationAlongOneAxe(glm::vec2 *aPoints, size_t aPointsCount,
 		glm::vec2 *bPoints, size_t bPointsCount, glm::vec2 axeDirection, bool *flipSign = 0);
@@ -107,20 +118,98 @@ namespace ph2d
 
 	};
 
+	struct LineEquation
+	{
+		LineEquation() {};
+
+		glm::vec3 lineEquation = {};
+
+		glm::vec2 getNormal() const
+		{
+			return glm::vec2(lineEquation.x, lineEquation.y);
+		}
+
+		void normalize()
+		{
+			glm::vec2 n = glm::vec2(lineEquation.x, lineEquation.y);
+			float l = glm::length(n);
+
+			if (l <= 0.00000001)
+			{
+				n = {1,0};
+			}
+			else
+			{
+				n /= l;
+			}
+
+			lineEquation.x = n.x;
+			lineEquation.y = n.y;
+		}
+
+		float getDistanceFromCenter() const
+		{
+			return lineEquation.z;
+		}
+
+		void createFromNormalAndPoint(const glm::vec2 normal, const glm::vec2 point)
+		{
+			float c = -glm::dot(normal, point); // c = -(a*x + b*y)
+			lineEquation = glm::vec3(normal.x, normal.y, c);
+		}
+
+		float getDistanceToPoint(const glm::vec2 &point) const
+		{
+			// Calculate signed distance from point to the line
+			return (lineEquation.x * point.x + lineEquation.y * point.y + lineEquation.z) 
+				/ std::sqrt(lineEquation.x * lineEquation.x + lineEquation.y * lineEquation.y);
+		}
+
+		void createFromRotationAndPoint(const float rotation, const glm::vec2 point)
+		{
+			auto n = rotationToVector(rotation);
+			createFromNormalAndPoint(n, point);
+		}
+
+		float computeEquation(glm::vec2 p) const
+		{
+			return lineEquation.x * p.x + lineEquation.y * p.y + lineEquation.z;
+		}
+
+		bool intersectPoint(glm::vec2 p) const
+		{
+			return computeEquation(p) >= 0;
+		}
+
+		// Get the closest point on the line to the origin (0,0)
+		glm::vec2 getClosestPointToOrigin() const
+		{
+			glm::vec2 normal = getNormal();
+			return -lineEquation.z * normal;
+		}
+
+		// Rotate the normal by 90 degrees to get a direction along the line
+		glm::vec2 getLineVector() const
+		{
+			return glm::vec2(-lineEquation.y, lineEquation.x);
+		}
+	};
+
 	struct Collider
 	{
 		union
 		{
 			struct
 			{
-				float radius;
-			}circle;
+				glm::vec2 size;
+			}box;
 
 			struct
 			{
-				glm::vec2 size;
-			}box;
-		} collider;
+				float radius;
+			}circle;
+	
+		} collider = {};
 
 		unsigned char type = 0;
 
@@ -134,6 +223,7 @@ namespace ph2d
 		ColliderNone = 0,
 		ColliderCircle,
 		ColliderBox,
+		ColliderHalfSpace,
 	};
 
 	Collider createBoxCollider(glm::vec2 size);
@@ -147,7 +237,7 @@ namespace ph2d
 
 		Collider collider = {};
 
-		float elasticity = 0.2;
+		float elasticity = 0.9;
 		float staticFriction = 0.5;
 		float dynamicFriction = 0.4;
 
@@ -172,11 +262,12 @@ namespace ph2d
 		void runSimulation(float deltaTime);
 
 		void addBody(glm::vec2 centerPos, Collider collider);
+
+		void addHalfSpaceStaticObject(glm::vec2 position, glm::vec2 normal);
 	};
 
 	glm::mat2 rotationMatrix(float angle);
 
 	void integrateForces(MotionState &motionState, float mass, float deltaTime);
+
 };
-
-

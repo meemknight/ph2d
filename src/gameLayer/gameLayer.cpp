@@ -18,6 +18,7 @@ gl2d::Renderer2D renderer;
 
 ph2d::PhysicsEngine physicsEngine;
 
+float floorPos = 1050;
 
 bool initGame()
 {
@@ -25,7 +26,7 @@ bool initGame()
 	gl2d::init();
 	renderer.create();
 
-	for (int i = 0; i < 1; i++)
+	for (int i = 0; i < 0; i++)
 	{
 		//if (i == 1) { mass = 0; }
 
@@ -48,6 +49,9 @@ bool initGame()
 		}
 	}
 
+
+	physicsEngine.addHalfSpaceStaticObject({0, floorPos}, {0, 1});
+
 	//physicsEngine.addBody({500, 1100}, 
 	//	ph2d::createBoxCollider({1100, 10}));
 
@@ -55,25 +59,33 @@ bool initGame()
 	
 	
 	physicsEngine.addBody({600, 600}, ph2d::createBoxCollider({350, 100}));
-	physicsEngine.bodies[1].motionState.rotation = glm::radians(30.f);
+	//physicsEngine.bodies[1].motionState.rotation = glm::radians(30.f);
 
-	//physicsEngine.addBody({500, 500}, ph2d::createCircleCollider({35}));
-	//physicsEngine.addBody({800, 100}, ph2d::createCircleCollider({25}));
+	physicsEngine.addBody({500, 500}, ph2d::createCircleCollider({55}));
+	//physicsEngine.addBody({800, 100}, ph2d::createCircleCollider({55}));
 	//physicsEngine.addBody({900, 500}, ph2d::createCircleCollider({25}));
 	//physicsEngine.addBody({550, 700}, ph2d::createCircleCollider({25}));
+
+	//std::cout << ph2d::vectorToRotation({0,1}) << "\n";
+	//std::cout << ph2d::vectorToRotation({-1,1}) << "\n";
+	//std::cout << ph2d::vectorToRotation({-1,0}) << "\n";
+	//std::cout << ph2d::vectorToRotation({0,-1}) << "\n";
+	//std::cout << ph2d::vectorToRotation({1,0}) << "\n";
+	//
+	//std::cout << "\n";
+	//std::cout << ph2d::rotationToVector(ph2d::vectorToRotation({0,1}) ).x << " " << ph2d::rotationToVector(ph2d::vectorToRotation({0,1}) ).y  << "\n";
+	//std::cout << ph2d::rotationToVector(ph2d::vectorToRotation({-1,1})).x << " " << ph2d::rotationToVector(ph2d::vectorToRotation({-1,1})).y << "\n";
+	//std::cout << ph2d::rotationToVector(ph2d::vectorToRotation({-1,0})).x << " " << ph2d::rotationToVector(ph2d::vectorToRotation({-1,0})).y << "\n";
+	//std::cout << ph2d::rotationToVector(ph2d::vectorToRotation({0,-1})).x << " " << ph2d::rotationToVector(ph2d::vectorToRotation({0,-1})).y << "\n";
+	//std::cout << ph2d::rotationToVector(ph2d::vectorToRotation({1,0}) ).x << " " << ph2d::rotationToVector(ph2d::vectorToRotation({1,0}) ).y  << "\n";
 
 	return true;
 }
 
 
-//IMPORTANT NOTICE, IF YOU WANT TO SHIP THE GAME TO ANOTHER PC READ THE README.MD IN THE GITHUB
-//https://github.com/meemknight/cmakeSetup
-//OR THE INSTRUCTION IN THE CMAKE FILE.
-//YOU HAVE TO CHANGE A FLAG IN THE CMAKE SO THAT RESOURCES_PATH POINTS TO RELATIVE PATHS
-//BECAUSE OF SOME CMAKE PROGBLMS, RESOURCES_PATH IS SET TO BE ABSOLUTE DURING PRODUCTION FOR MAKING IT EASIER.
-
 bool gameLogic(float deltaTime)
 {
+
 #pragma region init stuff
 	int w = 0; int h = 0;
 	w = platform::getFrameBufferSizeX(); //window w
@@ -84,7 +96,6 @@ bool gameLogic(float deltaTime)
 
 	renderer.updateWindowMetrics(w, h);
 #pragma endregion
-
 
 
 	//ph2d::AABB box1 = glm::vec4{300,300, 300,300};
@@ -114,7 +125,6 @@ bool gameLogic(float deltaTime)
 	//}
 	//renderer.renderCircleOutline(b.center, b.r, color, 2, 32);
 	static int simulationSpeed = 1;
-	float floorPos = 1050;
 	float rightPos = 1050;
 
 	//physicsEngine.bodies[0].motionState.rotation = glm::radians(-30.f);
@@ -125,13 +135,14 @@ bool gameLogic(float deltaTime)
 
 	ImGui::DragInt("Speed", &simulationSpeed);
 
-	ImGui::SliderAngle("ANgle", &physicsEngine.bodies[0].motionState.rotation);
+	//ImGui::SliderAngle("ANgle", &physicsEngine.bodies[0].motionState.rotation);
 
 	ImGui::End();
 	ImGui::PopStyleColor();
 
 	static int selected = -1;
 
+	//mouse
 	//physicsEngine.bodies[0].motionState.setPos(platform::getRelMousePosition());
 
 	static glm::vec2 pressedPosition = {};
@@ -180,11 +191,11 @@ bool gameLogic(float deltaTime)
 	{
 
 		//gravity
-		for (int i=0; i<physicsEngine.bodies.size(); i++)
-		{
-			if(physicsEngine.bodies[i].motionState.mass != 0 && physicsEngine.bodies[i].motionState.mass != INFINITY)
-				physicsEngine.bodies[i].motionState.acceleration += glm::vec2(0, 9.81) * 100.f;
-		}
+		//for (int i=0; i<physicsEngine.bodies.size(); i++)
+		//{
+		//	if(physicsEngine.bodies[i].motionState.mass != 0 && physicsEngine.bodies[i].motionState.mass != INFINITY)
+		//		physicsEngine.bodies[i].motionState.acceleration += glm::vec2(0, 9.81) * 100.f;
+		//}
 
 		physicsEngine.runSimulation(deltaTime);
 
@@ -195,14 +206,14 @@ bool gameLogic(float deltaTime)
 			auto right = b.getAABB().max().x;
 			auto top = b.getAABB().min().y;
 
-			if (bottom > floorPos)
-			{
-				float diff = bottom - floorPos;
-				b.motionState.pos.y -= diff;
-				b.motionState.lastPos = b.motionState.pos;
-
-				b.motionState.velocity.y *= -0.9;
-			}
+			//if (bottom > floorPos)
+			//{
+			//	float diff = bottom - floorPos;
+			//	b.motionState.pos.y -= diff;
+			//	b.motionState.lastPos = b.motionState.pos;
+			//
+			//	b.motionState.velocity.y *= -0.9;
+			//}
 			
 			if (left < 0)
 			{
@@ -238,6 +249,7 @@ bool gameLogic(float deltaTime)
 	float p = 0;
 	glm::vec2 n = {};
 	bool penetrated = 0;
+	glm::vec2 contactPoint = {};
 
 	//if (ph2d::OBBvsCircle(physicsEngine.bodies[0].getAABB(),
 	//	physicsEngine.bodies[0].motionState.rotation,
@@ -251,7 +263,16 @@ bool gameLogic(float deltaTime)
 	//	physicsEngine.bodies[0].motionState.rotation,
 	//	physicsEngine.bodies[1].getAABB(),
 	//	physicsEngine.bodies[1].motionState.rotation,
-	//	p, n))
+	//	p, n, contactPoint))
+	//{
+	//	penetrated = true;
+	//}
+
+	//auto a = physicsEngine.bodies[0].getAABB();
+	//auto b = physicsEngine.bodies[1].getAABB();
+	//ph2d::Circle a1 = glm::vec3{a.center(),a.size.x / 2};
+	//ph2d::Circle b1 = glm::vec3{b.center(),b.size.x / 2};
+	//if (ph2d::CirclevsCircle(a1, b1, p, n, contactPoint))
 	//{
 	//	penetrated = true;
 	//}
@@ -268,9 +289,7 @@ bool gameLogic(float deltaTime)
 	//}
 
 	ImGui::Begin("Settings");
-	
 	ImGui::Text("Penetration: %f", p);
-
 	ImGui::End();
 
 
@@ -299,6 +318,12 @@ bool gameLogic(float deltaTime)
 		{
 			renderer.renderCircleOutline(b.motionState.pos,
 				b.collider.collider.circle.radius, color, 2, 32);
+
+			glm::vec2 vector = {1,0};
+			vector = ph2d::rotateAroundCenter(vector, b.motionState.rotation);
+			renderer.renderLine(b.motionState.pos, b.motionState.pos + vector *
+				b.collider.collider.circle.radius, color, 4);
+
 		}
 		else if (b.collider.type == ph2d::ColliderBox)
 		{
@@ -306,16 +331,45 @@ bool gameLogic(float deltaTime)
 
 			renderer.renderRectangleOutline(b.getAABB().asVec4(), color, 2, {}, rotation);
 		}
+		else if (b.collider.type == ph2d::ColliderHalfSpace)
+		{
+
+			ph2d::LineEquation lineEquation;
+			lineEquation.createFromRotationAndPoint(b.motionState.rotation,
+				b.motionState.pos);
+
+			glm::vec2 lineEquationStart = lineEquation.getClosestPointToOrigin();
+			lineEquationStart -= lineEquation.getLineVector() * 1000.f;
+			renderer.renderLine(lineEquationStart, lineEquationStart + lineEquation.getLineVector() * 2000.f, Colors_Red);
+
+
+		}
 	}
 
-	renderer.renderRectangle({-100, floorPos, 100000, 20});
+	//renderer.renderRectangle({-100, floorPos, 100000, 20});
 
 	if (penetrated)
 	{
-		renderer.renderLine(physicsEngine.bodies[0].motionState.pos,
-			physicsEngine.bodies[0].motionState.pos + n * 100.f, Colors_Green, 4);
+		renderer.renderLine(contactPoint,
+			contactPoint + n * 100.f, Colors_Green, 4);
 
+		renderer.renderRectangle({contactPoint - glm::vec2(2,2), 4,4}, Colors_White);
 	}
+
+
+	//glm::vec2 lineEquationStart = lineEquation.getClosestPointToOrigin();
+	//lineEquationStart -= lineEquation.getLineVector() * 1000.f;
+	//renderer.renderLine(lineEquationStart, lineEquationStart + lineEquation.getLineVector() * 2000.f, Colors_Red);
+
+	ph2d::LineEquation lineEquation;
+	lineEquation.createFromNormalAndPoint({0,1}, {0, floorPos});
+
+	//float pl = 0;
+	//pl = lineEquation.computeEquation(platform::getRelMousePosition());
+	//ImGui::Begin("Settings");
+	//ImGui::Text("Penetration line: %f", pl);
+	//ImGui::End();
+
 
 	//glm::vec2 p2 = platform::getRelMousePosition();
 	//p2 = ph2d::rotateAroundCenter(p2, glm::radians(45.f));

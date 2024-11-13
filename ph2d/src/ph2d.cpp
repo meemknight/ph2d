@@ -188,6 +188,27 @@ namespace ph2d
 		return true;
 	}
 
+	bool HalfSpaceVSCircle(LineEquation line, AABB circle, float &penetration,
+		glm::vec2 &normal)
+	{
+		float r = circle.size.x / 2.f;
+		
+		line.normalize();
+
+		normal = -line.getNormal();
+
+		float distance = line.computeEquation(circle.center());
+
+		penetration = r + distance;
+
+		if (penetration > 0)
+		{
+			return 1;
+		}
+
+		return 0;
+	}
+
 	//The second is the circle
 	bool OBBvsCircle(AABB abox, float ar, AABB bbox, float &penetration,
 		glm::vec2 &normal)
@@ -390,7 +411,7 @@ namespace ph2d
 	}
 
 	bool OBBvsOBB(AABB a, float ar, AABB b, float br,
-		float &penetration, glm::vec2 &normal)
+		float &penetration, glm::vec2 &normal, glm::vec2 &contactPoint)
 	{
 		penetration = 0;
 		normal = {0,0};
@@ -437,6 +458,14 @@ namespace ph2d
 		penetration = minPenetration;
 		normal = glm::normalize(minPenetrationAxis);
 		if (flipSign) { normal = -normal; }
+
+
+		//contactPoint
+		// Midpoint between the two centers
+		glm::vec2 midpoint = (a.center() + b.center()) * 0.5f;
+		// Adjust by half of the penetration depth along the collision normal
+		contactPoint = midpoint - (normal * (penetration * 0.5f));
+
 		return true;
 	}
 
@@ -515,7 +544,7 @@ namespace ph2d
 
 	bool CirclevsCircle(Circle a, Circle b,
 		float &penetration,
-		glm::vec2 &normal
+		glm::vec2 &normal, glm::vec2 &contactPoint
 		)
 	{
 		float r = a.r + b.r;
@@ -530,6 +559,8 @@ namespace ph2d
 			normal = b.center - a.center;
 			normalizeSafe(normal);
 			penetration = r - sqrt(distanceSquared);
+
+			contactPoint = a.center + normal * (a.r - penetration / 2.f);
 		}
 
 		return rez;
@@ -552,38 +583,48 @@ namespace ph2d
 		}
 	}
 
-	void integrateForces(MotionState &motionState, float mass, float deltaTime)
+	void integrateForces(MotionState &motionState, float deltaTime)
 	{
 
-		//linear motion
-		motionState.acceleration = glm::clamp(motionState.acceleration, 
-			glm::vec2(-MAX_ACCELERATION), glm::vec2(MAX_ACCELERATION));
-
-		//Symplectic Euler
-		motionState.velocity += motionState.acceleration * deltaTime * 0.5f;
-		motionState.velocity = glm::clamp(motionState.velocity, glm::vec2(-MAX_VELOCITY), glm::vec2(MAX_VELOCITY));
-
-		motionState.pos += motionState.velocity * deltaTime;
-
-		motionState.velocity += motionState.acceleration * deltaTime * 0.5f;
-		motionState.velocity = glm::clamp(motionState.velocity, glm::vec2(-MAX_VELOCITY), glm::vec2(MAX_VELOCITY));
-
-		if (std::fabs(motionState.velocity.x) < 0.00001) { motionState.velocity.x = 0; }
-		if (std::fabs(motionState.velocity.y) < 0.00001) { motionState.velocity.y = 0; }
-
-		motionState.acceleration = {};
-
-
-		float inverseMomentOfInertia = 0;
-		if (!(motionState.momentOfInertia == 0 || motionState.momentOfInertia == INFINITY))
+		if (motionState.mass == 0 || motionState.mass == INFINITY)
 		{
-			inverseMomentOfInertia = 1.0f / motionState.momentOfInertia;
+			motionState.acceleration = {};
+			motionState.velocity = {};
+		}
+		else
+		{
+			//linear motion
+			motionState.acceleration = glm::clamp(motionState.acceleration,
+				glm::vec2(-MAX_ACCELERATION), glm::vec2(MAX_ACCELERATION));
+
+			//Symplectic Euler
+			motionState.velocity += motionState.acceleration * deltaTime * 0.5f;
+			motionState.velocity = glm::clamp(motionState.velocity, glm::vec2(-MAX_VELOCITY), glm::vec2(MAX_VELOCITY));
+
+			motionState.pos += motionState.velocity * deltaTime;
+
+			motionState.velocity += motionState.acceleration * deltaTime * 0.5f;
+			motionState.velocity = glm::clamp(motionState.velocity, glm::vec2(-MAX_VELOCITY), glm::vec2(MAX_VELOCITY));
+
+			if (std::fabs(motionState.velocity.x) < 0.00001) { motionState.velocity.x = 0; }
+			if (std::fabs(motionState.velocity.y) < 0.00001) { motionState.velocity.y = 0; }
+
+			motionState.acceleration = {};
 		}
 
-		//rotation
-		motionState.angularVelocity += motionState.torque * inverseMomentOfInertia * deltaTime;
-		motionState.rotation += motionState.angularVelocity * deltaTime;
-		motionState.torque = 0;
+		if (motionState.momentOfInertia == 0 || motionState.momentOfInertia == INFINITY)
+		{
+			motionState.angularVelocity = 0;
+			motionState.torque = 0;
+		}
+		else
+		{
+			//rotation
+			motionState.angularVelocity += motionState.torque * (1.f/motionState.momentOfInertia) * deltaTime;
+			motionState.rotation += motionState.angularVelocity * deltaTime;
+			motionState.torque = 0;
+		}
+		
 	}
 
 
@@ -623,16 +664,14 @@ namespace ph2d
 	{
 		switch (type)
 		{
+			case ColliderCircle:
+			return (collider.circle.radius * collider.circle.radius * 3.1415);
+			
+			case ColliderBox:
+			return collider.box.size.x * collider.box.size.y;
 
-		case ColliderCircle:
-		return (collider.circle.radius * collider.circle.radius * 3.1415);
-		
-		case ColliderBox:
-		return collider.box.size.x * collider.box.size.y;
-
-		default:
-		return 0;
-
+			default:
+			return 0;
 		}
 	}
 
@@ -691,8 +730,15 @@ glm::vec2 cross(float s, glm::vec2 a)
 
 void ph2d::MotionState::applyImpulseObjectPosition(glm::vec2 impulse, glm::vec2 contactVector)
 {
-	velocity += (1.0f / mass) * impulse;
-	angularVelocity -= (1.0f / momentOfInertia) * cross(contactVector, impulse);
+	if (mass != 0 && mass != INFINITY )
+	{
+		velocity += (1.0f / mass) * impulse;
+	}
+
+	//if (momentOfInertia != 0 && momentOfInertia != INFINITY)
+	//{
+	//	angularVelocity -= (1.0f / momentOfInertia) * cross(contactVector, impulse);
+	//}
 }
 
 void ph2d::MotionState::applyImpulseWorldPosition(glm::vec2 impulse, glm::vec2 contactVectorWorldPos)
@@ -731,24 +777,34 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 	for (int currentIteration = 0; currentIteration < counter; currentIteration++)
 	{
 		auto positionalCorrection = [&](Body &A, Body &B, glm::vec2 n,
-			float penetrationDepth, float aInverseMass, float bInverseMass)
+			float penetrationDepth)
 		{
+
+			float massInverseA = 1.f / A.motionState.mass;
+			float massInverseB = 1.f / B.motionState.mass;
+
+			if (A.motionState.mass == 0 || A.motionState.mass == INFINITY) { massInverseA = 0; }
+			if (B.motionState.mass == 0 || B.motionState.mass == INFINITY) { massInverseB = 0; }
 
 			const float percent = 0.40; // usually 20% to 80%
 			const float slop = 0.01; // usually 0.01 to 0.1 
 
-			glm::vec2 correction = (glm::max(penetrationDepth - slop, 0.0f) / (aInverseMass + bInverseMass)) * percent * n;
+			glm::vec2 correction = (glm::max(penetrationDepth - slop, 0.0f) / (massInverseA + massInverseB)) * percent * n;
 
-			A.motionState.pos -= aInverseMass * correction;
-			B.motionState.pos += bInverseMass * correction;
+			A.motionState.pos -= massInverseA * correction;
+			B.motionState.pos += massInverseB * correction;
 		};
 
 		auto applyFriction = [&](Body &A, Body &B, glm::vec2 tangent, glm::vec2 rv,
-			float aInverseMass, float bInverseMass, float j)
+			float aInverseMass, float bInverseMass, float j, glm::vec2 rContactA,
+			glm::vec2 rContactB, glm::vec2 contactPoint)
 		{
 			// Solve for magnitude to apply along the friction vector
 			float jt = -glm::dot(rv, tangent);
-			jt = jt / (aInverseMass + bInverseMass);
+			jt = jt / (aInverseMass + bInverseMass) +
+				(std::pow(cross(rContactA, rv), 2) / A.motionState.momentOfInertia) +
+				(std::pow(cross(rContactB, rv), 2) / B.motionState.momentOfInertia)
+				;
 
 			// PythagoreanSolve = A^2 + B^2 = C^2, solving for C given A and B
 			// Use to approximate mu given friction coefficients of each body
@@ -768,13 +824,17 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 			}
 
 			// Apply
-			A.motionState.velocity -= (aInverseMass)*frictionImpulse;
-			B.motionState.velocity += (bInverseMass)*frictionImpulse;
+			//A.motionState.velocity -= (aInverseMass)*frictionImpulse;
+			//B.motionState.velocity += (bInverseMass)*frictionImpulse;
+
+			A.motionState.applyImpulseWorldPosition(aInverseMass * -frictionImpulse, contactPoint);
+			B.motionState.applyImpulseWorldPosition(bInverseMass *  frictionImpulse, contactPoint);
+
 
 		};
 
 		auto impulseResolution = [&](Body &A, Body &B, glm::vec2 normal,
-			float velAlongNormal, float penetrationDepth)
+			float velAlongNormal, float penetrationDepth, glm::vec2 contactPoint)
 		{
 
 			//calculate elasticity
@@ -782,20 +842,46 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 
 			float massInverseA = 1.f / A.motionState.mass;
 			float massInverseB = 1.f / B.motionState.mass;
-
 			if (A.motionState.mass == 0 || A.motionState.mass == INFINITY) { massInverseA = 0; }
 			if (B.motionState.mass == 0 || B.motionState.mass == INFINITY) { massInverseB = 0; }
 
+			float momentOfInertiaInverseA = 1.f / A.motionState.momentOfInertia;
+			float momentOfInertiaInverseB = 1.f / B.motionState.momentOfInertia;
+			if (A.motionState.momentOfInertia == 0 || A.motionState.momentOfInertia == INFINITY) { momentOfInertiaInverseA = 0; }
+			if (B.motionState.momentOfInertia == 0 || B.motionState.momentOfInertia == INFINITY) { momentOfInertiaInverseB = 0; }
+
+
+			glm::vec2 rContactA = contactPoint - A.motionState.pos;
+			glm::vec2 rContactB = contactPoint - B.motionState.pos;
+
+			//float inertiaDivisorA = std::pow(cross(rContactA, normal), 2) * momentOfInertiaInverseA;
+			//float inertiaDivisorB = std::pow(cross(rContactB, normal), 2) * momentOfInertiaInverseB;
+
+			float inertiaDivisorA = 0;
+			float inertiaDivisorB = 0;
+
+			if (massInverseA == 0 && massInverseB == 0
+				&& inertiaDivisorA == 0 && inertiaDivisorB == 0
+				)
+			{
+				//nothing will move, no need to compute anything
+				return;
+			}
+
+
 			// Calculate impulse scalar
 			float j = -(1.f + e) * velAlongNormal;
-			j /= massInverseA + massInverseB;
+			j /= (massInverseA + massInverseB + 
+				inertiaDivisorA +
+				inertiaDivisorB);
 
 			// Apply impulse
 			glm::vec2 impulse = j * normal;
-			A.motionState.velocity -= massInverseA * impulse;
-			B.motionState.velocity += massInverseB * impulse;
+			//A.motionState.velocity -= massInverseA * impulse;
+			//B.motionState.velocity += massInverseB * impulse;
 
-			positionalCorrection(A, B, normal, penetrationDepth, massInverseA, massInverseB);
+			A.motionState.applyImpulseWorldPosition(massInverseA * -impulse, contactPoint);
+			B.motionState.applyImpulseWorldPosition(massInverseB *  impulse, contactPoint);
 
 			{
 
@@ -810,7 +896,8 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 
 				normalizeSafe(tangent);
 				
-				applyFriction(A, B, tangent, rv, massInverseA, massInverseB, j);
+				//applyFriction(A, B, tangent, rv, massInverseA, massInverseB, j,
+				//	rContactA, rContactB, contactPoint);
 			}
 
 
@@ -838,12 +925,13 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 				{
 
 					glm::vec2 normal = {};
+					glm::vec2 contactPoint = {};
 					float penetration = 0;
 
 					if (ph2d::CirclevsCircle(
 						glm::vec3(A.motionState.pos, A.collider.collider.circle.radius),
 						glm::vec3(B.motionState.pos, B.collider.collider.circle.radius), 
-						penetration, normal))
+						penetration, normal, contactPoint))
 					{
 						glm::vec2 relativeVelocity = B.motionState.velocity -
 							A.motionState.velocity;
@@ -856,8 +944,11 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 						}
 						else
 						{
-							impulseResolution(A, B, normal, velAlongNormal, penetration);
+							impulseResolution(A, B, normal, velAlongNormal, penetration, contactPoint);
 						}
+
+						positionalCorrection(A, B, normal, penetration);
+
 					}
 				}
 				else if (A.collider.type == ph2d::ColliderBox &&
@@ -868,12 +959,13 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 					auto bbox = B.getAABB();
 
 					glm::vec2 normal = {};
+					glm::vec2 contactPoint = {};
 					float penetration = 0;
 
 					if (ph2d::OBBvsOBB(
 						abox, A.motionState.rotation, bbox, 
 						B.motionState.rotation,
-						penetration, normal))
+						penetration, normal, contactPoint))
 					{
 
 						glm::vec2 relativeVelocity = B.motionState.velocity -
@@ -887,8 +979,11 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 						}
 						else
 						{
-							impulseResolution(A, B, normal, velAlongNormal, penetration);
+							impulseResolution(A, B, normal, velAlongNormal, penetration, contactPoint);
 						}
+
+						positionalCorrection(A, B, normal, penetration);
+
 					}
 
 				}
@@ -900,6 +995,7 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 					auto bbox = B.getAABB();
 
 					glm::vec2 normal = {};
+					glm::vec2 contactPoint = {};
 					float penetration = 0;
 
 					if (ph2d::OBBvsCircle(
@@ -916,15 +1012,54 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 						}
 						else
 						{
-							impulseResolution(A, B, normal, velAlongNormal, penetration);
+							impulseResolution(A, B, normal, velAlongNormal, penetration, contactPoint);
 						}
+						
+						positionalCorrection(A, B, normal, penetration);
+
+					}
+				}
+				else if (A.collider.type == ph2d::ColliderHalfSpace &&
+					B.collider.type == ph2d::ColliderCircle)
+				{
+
+					//auto abox = A.getAABB();
+					auto bbox = B.getAABB();
+
+					glm::vec2 normal = {};
+					glm::vec2 contactPoint = {};
+					float penetration = 0;
+
+					LineEquation lineEquation;
+					lineEquation.createFromRotationAndPoint(A.motionState.rotation,
+						A.motionState.pos);
+
+					if (ph2d::HalfSpaceVSCircle(
+						lineEquation, bbox, penetration, normal))
+					{
+						glm::vec2 relativeVelocity = B.motionState.velocity -
+							A.motionState.velocity;
+						float velAlongNormal = glm::dot(relativeVelocity, normal);
+
+						// Do not resolve if velocities are separating
+						if (velAlongNormal > 0)
+						{
+
+						}
+						else
+						{
+							impulseResolution(A, B, normal, velAlongNormal, penetration, contactPoint);
+						}
+
+						positionalCorrection(A, B, normal, penetration);
+
 					}
 				}
 
 
 			}
 
-			integrateForces(bodies[i].motionState, 0, deltaTime);
+			integrateForces(bodies[i].motionState, deltaTime);
 			bodies[i].motionState.lastPos = bodies[i].motionState.pos;
 		}
 
@@ -944,6 +1079,42 @@ void ph2d::PhysicsEngine::addBody(glm::vec2 centerPos, Collider collider)
 
 	bodies.push_back(body);
 
+}
+
+
+float ph2d::vectorToRotation(const glm::vec2 &vector)
+{
+	// Handle zero vector by defaulting to 0 radians (pointing up)
+	if (glm::length(vector) == 0.0f)
+	{
+		return 0.0f;
+	}
+	
+	// Calculate angle using atan2
+	float angle = atan2(-vector.x, vector.y);
+
+	// Adjust to ensure 0 radians corresponds to the up vector (0, 1)
+	return angle;
+}
+
+glm::vec2 ph2d::rotationToVector(float rotation)
+{
+	// Calculate direction vector using sine and cosine
+	float x = sin(rotation);
+	float y = cos(rotation);
+	return glm::normalize(glm::vec2(-x, y));
+}
+
+void ph2d::PhysicsEngine::addHalfSpaceStaticObject(glm::vec2 position, glm::vec2 normal)
+{
+	Body body;
+	body.motionState.setPos(position);
+	body.collider.type = ColliderType::ColliderHalfSpace;
+	body.motionState.mass = 0;
+	body.motionState.momentOfInertia = 0;
+
+	body.motionState.rotation = vectorToRotation(normal);
+	bodies.push_back(body);
 
 }
 
