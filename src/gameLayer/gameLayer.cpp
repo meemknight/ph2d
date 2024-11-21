@@ -54,13 +54,16 @@ bool initGame()
 	//physicsEngine.addBody({500, 1100}, 
 	//	ph2d::createBoxCollider({1100, 10}));
 
-	//physicsEngine.addBody({500, 500}, ph2d::createBoxCollider({300, 300}));
+	physicsEngine.addBody({500, 500}, ph2d::createBoxCollider({300, 300}));
 	
-	
-	physicsEngine.addBody({600, 600}, ph2d::createBoxCollider({350, 100}));
-	//physicsEngine.bodies[0].motionState.rotation = glm::radians(30.f);
+	physicsEngine.addBody({700, 700}, ph2d::createBoxCollider({300, 300}));
 
-	physicsEngine.addBody({500, 500}, ph2d::createCircleCollider({55}));
+
+	
+	//physicsEngine.addBody({600, 600}, ph2d::createBoxCollider({350, 100}));
+	//physicsEngine.bodies[1].motionState.rotation = glm::radians(30.f);
+	
+	//physicsEngine.addBody({500, 500}, ph2d::createCircleCollider({55}));
 	//physicsEngine.addBody({800, 100}, ph2d::createCircleCollider({55}));
 	//physicsEngine.addBody({900, 500}, ph2d::createCircleCollider({25}));
 	//physicsEngine.addBody({550, 700}, ph2d::createCircleCollider({25}));
@@ -78,7 +81,7 @@ bool initGame()
 	//std::cout << ph2d::rotationToVector(ph2d::vectorToRotation({0,-1})).x << " " << ph2d::rotationToVector(ph2d::vectorToRotation({0,-1})).y << "\n";
 	//std::cout << ph2d::rotationToVector(ph2d::vectorToRotation({1,0}) ).x << " " << ph2d::rotationToVector(ph2d::vectorToRotation({1,0}) ).y  << "\n";
 
-	physicsEngine.addHalfSpaceStaticObject({0, floorPos}, {0, 1});
+	//physicsEngine.addHalfSpaceStaticObject({0, floorPos}, {0, 1});
 	//physicsEngine.addBody({500, floorPos}, ph2d::createBoxCollider({900, 50}));
 	//physicsEngine.bodies.back().motionState.mass = 0;
 	//physicsEngine.bodies.back().motionState.momentOfInertia = 0;
@@ -256,9 +259,8 @@ bool gameLogic(float deltaTime)
 	bool penetrated = 0;
 	glm::vec2 contactPoint = {};
 
-	if (ph2d::OBBvsCircle(physicsEngine.bodies[0].getAABB(),
-		physicsEngine.bodies[0].motionState.rotation,
-		physicsEngine.bodies[1].getAABB(),
+	if (ph2d::BodyvsBody(physicsEngine.bodies[0],
+		physicsEngine.bodies[1],
 		p, n, contactPoint))
 	{
 		penetrated = true;

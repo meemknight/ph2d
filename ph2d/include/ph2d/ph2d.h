@@ -250,6 +250,9 @@ namespace ph2d
 		bool intersectPoint(glm::vec2 p, float delta = 0);
 	};
 
+	bool BodyvsBody(Body &A, Body &B, float &penetration,
+		glm::vec2 &normal, glm::vec2 &contactPoint);
+
 	struct PhysicsEngine
 	{
 		std::vector<Body> bodies;

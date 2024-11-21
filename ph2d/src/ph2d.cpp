@@ -175,9 +175,13 @@ namespace ph2d
 		if (inside)
 		{
 			normal = -normal2;
-			penetration = d - r;
+			penetration = r - d;
 			normalizeSafe(normal);
-			contactPoint = bbox.center() + (-normal * (r - penetration * 0.5f));
+
+			glm::vec2 midpoint = (abox.center() + bbox.center()) * 0.5f;
+			//contactPoint = midpoint - (normal * (penetration * 0.5f));
+			contactPoint = bbox.center() + (-normal * (r - std::min(penetration, r) * 0.5f));
+			//contactPoint = bbox.center();
 		}
 		else
 		{
@@ -238,7 +242,6 @@ namespace ph2d
 
 		return rez;
 	}
-
 
 	bool AABBvsAABB(AABB abox, AABB bbox, float &penetration,
 		glm::vec2 &normal)
@@ -358,6 +361,64 @@ namespace ph2d
 			if (flipSign) { *flipSign = 1; }
 			return overlapB;
 		}
+	}
+
+
+	bool HalfSpaceVSOBB(LineEquation line, AABB bbox, float br, float &penetration,
+		glm::vec2 &normal, glm::vec2 &contactPoint)
+	{
+
+		glm::vec2 corners[4] = {};
+		bbox.getCornersRotated(corners, br);
+
+		float intersections[4] = {};
+		int intersectioncCount = 0;
+		float biggestPenetration = -100000;
+		glm::vec2 intersectedCrners[4] = {};
+
+
+		for (int i = 0; i < 4; i++)
+		{
+			float rez = 0;
+			rez = line.computeEquation(corners[i]);
+
+			if (rez >= 0)
+			{
+				intersections[intersectioncCount] = rez;
+				intersectedCrners[intersectioncCount] = corners[i];
+				intersectioncCount++;
+				
+				if (rez > biggestPenetration)
+				{
+					biggestPenetration = rez;
+				}
+			}
+		}
+
+		if (intersectioncCount)
+		{
+			line.normalize();
+			normal = line.getNormal();
+			penetration = biggestPenetration;
+
+			contactPoint = {};
+
+			for (int i = 0; i < intersectioncCount; i++)
+			{
+				contactPoint += intersectedCrners[i];
+			}
+
+			contactPoint /= intersectioncCount;
+
+			if (intersectioncCount != 4)
+			{
+				contactPoint += normal * (-penetration / 2.f);
+			}
+
+			return true;
+		}
+
+		return false;
 	}
 
 	//a is aabb and b has a rotation
@@ -572,6 +633,114 @@ namespace ph2d
 		}
 
 		return rez;
+	}
+
+	bool BodyvsBody(Body &A, Body &B, float &penetration,
+		glm::vec2 &normal, glm::vec2 &contactPoint)
+	{
+
+		if (A.collider.type == ph2d::ColliderCircle &&
+			B.collider.type == ph2d::ColliderCircle
+			)
+		{
+
+			return ph2d::CirclevsCircle(
+				glm::vec3(A.motionState.pos, A.collider.collider.circle.radius),
+				glm::vec3(B.motionState.pos, B.collider.collider.circle.radius),
+				penetration, normal, contactPoint);
+			
+		}
+		else if (A.collider.type == ph2d::ColliderBox &&
+			B.collider.type == ph2d::ColliderBox)
+		{
+			
+			auto abox = A.getAABB();
+			auto bbox = B.getAABB();
+
+			return ph2d::OBBvsOBB(
+				abox, A.motionState.rotation, bbox,
+				B.motionState.rotation,
+				penetration, normal, contactPoint);
+
+		}
+
+		else if (A.collider.type == ph2d::ColliderBox &&
+			B.collider.type == ph2d::ColliderCircle)
+		{
+
+			auto abox = A.getAABB();
+			auto bbox = B.getAABB();
+
+			return ph2d::OBBvsCircle(
+				abox, A.motionState.rotation, bbox, penetration, normal, contactPoint);
+
+		}
+		else if (A.collider.type == ph2d::ColliderCircle &&
+			B.collider.type == ph2d::ColliderBox)
+		{
+
+			auto abox = A.getAABB();
+			auto bbox = B.getAABB();
+
+			return ph2d::OBBvsCircle(
+				bbox, B.motionState.rotation, abox, penetration, normal, contactPoint);
+
+		}
+
+		else if (A.collider.type == ph2d::ColliderHalfSpace &&
+			B.collider.type == ph2d::ColliderCircle)
+		{
+
+			auto bbox = B.getAABB();
+
+			LineEquation lineEquation;
+			lineEquation.createFromRotationAndPoint(A.motionState.rotation,
+				A.motionState.pos);
+
+			return ph2d::HalfSpaceVSCircle(
+				lineEquation, bbox, penetration, normal, contactPoint);
+		}
+		else if (A.collider.type == ph2d::ColliderCircle &&
+			B.collider.type == ph2d::ColliderHalfSpace)
+		{
+
+			auto abox = A.getAABB();
+
+			LineEquation lineEquation;
+			lineEquation.createFromRotationAndPoint(B.motionState.rotation,
+				B.motionState.pos);
+
+			return ph2d::HalfSpaceVSCircle(
+				lineEquation, abox, penetration, normal, contactPoint);
+		}
+
+		else if (A.collider.type == ph2d::ColliderHalfSpace &&
+			B.collider.type == ph2d::ColliderBox)
+		{
+			auto bbox = B.getAABB();
+
+			LineEquation lineEquation;
+			lineEquation.createFromRotationAndPoint(A.motionState.rotation,
+				A.motionState.pos);
+
+			return ph2d::HalfSpaceVSOBB(
+				lineEquation, bbox, B.motionState.rotation,
+				penetration, normal, contactPoint);
+		}
+		else if (A.collider.type == ph2d::ColliderBox &&
+			B.collider.type == ph2d::ColliderHalfSpace)
+		{
+			auto abox = A.getAABB();
+
+			LineEquation lineEquation;
+			lineEquation.createFromRotationAndPoint(B.motionState.rotation,
+				B.motionState.pos);
+
+			return ph2d::HalfSpaceVSOBB(
+				lineEquation, abox, A.motionState.rotation, penetration, normal, contactPoint);
+		}
+
+		return 0;
 	}
 
 	//todo make sure drag can't be stronger than speed!
@@ -942,143 +1111,28 @@ void ph2d::PhysicsEngine::runSimulation(float deltaTime)
 				auto &A = bodies[i];
 				auto &B = bodies[j];
 
-				if (A.collider.type == ph2d::ColliderCircle &&
-					B.collider.type == ph2d::ColliderCircle
-					)
+				glm::vec2 normal = {};
+				glm::vec2 contactPoint = {};
+				float penetration = 0;
+
+				if (BodyvsBody(A, B, penetration, normal, contactPoint))
 				{
+					glm::vec2 relativeVelocity = B.motionState.velocity -
+						A.motionState.velocity;
+					float velAlongNormal = glm::dot(relativeVelocity, normal);
 
-					glm::vec2 normal = {};
-					glm::vec2 contactPoint = {};
-					float penetration = 0;
-
-					if (ph2d::CirclevsCircle(
-						glm::vec3(A.motionState.pos, A.collider.collider.circle.radius),
-						glm::vec3(B.motionState.pos, B.collider.collider.circle.radius), 
-						penetration, normal, contactPoint))
-					{
-						glm::vec2 relativeVelocity = B.motionState.velocity -
-							A.motionState.velocity;
-						float velAlongNormal = glm::dot(relativeVelocity, normal);
-
-						// Do not resolve if velocities are separating
-						if (velAlongNormal > 0)
-						{
-
-						}
-						else
-						{
-							impulseResolution(A, B, normal, velAlongNormal, penetration, contactPoint);
-						}
-
-						positionalCorrection(A, B, normal, penetration);
-
-					}
-				}
-				else if (A.collider.type == ph2d::ColliderBox &&
-					B.collider.type == ph2d::ColliderBox)
-				{
-
-					auto abox = A.getAABB();
-					auto bbox = B.getAABB();
-
-					glm::vec2 normal = {};
-					glm::vec2 contactPoint = {};
-					float penetration = 0;
-
-					if (ph2d::OBBvsOBB(
-						abox, A.motionState.rotation, bbox, 
-						B.motionState.rotation,
-						penetration, normal, contactPoint))
+					// Do not resolve if velocities are separating
+					if (velAlongNormal > 0)
 					{
 
-						glm::vec2 relativeVelocity = B.motionState.velocity -
-							A.motionState.velocity;
-						float velAlongNormal = glm::dot(relativeVelocity, normal);
-						
-						// Do not resolve if velocities are separating
-						if (velAlongNormal > 0)
-						{
-						
-						}
-						else
-						{
-							impulseResolution(A, B, normal, velAlongNormal, penetration, contactPoint);
-						}
-
-						positionalCorrection(A, B, normal, penetration);
-
 					}
-
-				}
-				else if (A.collider.type == ph2d::ColliderBox &&
-					B.collider.type == ph2d::ColliderCircle)
-				{
-
-					auto abox = A.getAABB();
-					auto bbox = B.getAABB();
-
-					glm::vec2 normal = {};
-					glm::vec2 contactPoint = {};
-					float penetration = 0;
-
-					if (ph2d::OBBvsCircle(
-						abox, A.motionState.rotation, bbox, penetration, normal, contactPoint))
+					else
 					{
-						glm::vec2 relativeVelocity = B.motionState.velocity -
-							A.motionState.velocity;
-						float velAlongNormal = glm::dot(relativeVelocity, normal);
-
-						// Do not resolve if velocities are separating
-						if (velAlongNormal > 0)
-						{
-
-						}
-						else
-						{
-							impulseResolution(A, B, normal, velAlongNormal, penetration, contactPoint);
-						}
-						
-						positionalCorrection(A, B, normal, penetration);
-
+						impulseResolution(A, B, normal, velAlongNormal, penetration, contactPoint);
 					}
+
+					positionalCorrection(A, B, normal, penetration);
 				}
-				else if (A.collider.type == ph2d::ColliderHalfSpace &&
-					B.collider.type == ph2d::ColliderCircle)
-				{
-
-					//auto abox = A.getAABB();
-					auto bbox = B.getAABB();
-
-					glm::vec2 normal = {};
-					glm::vec2 contactPoint = {};
-					float penetration = 0;
-
-					LineEquation lineEquation;
-					lineEquation.createFromRotationAndPoint(A.motionState.rotation,
-						A.motionState.pos);
-
-					if (ph2d::HalfSpaceVSCircle(
-						lineEquation, bbox, penetration, normal, contactPoint))
-					{
-						glm::vec2 relativeVelocity = B.motionState.velocity -
-							A.motionState.velocity;
-						float velAlongNormal = glm::dot(relativeVelocity, normal);
-
-						// Do not resolve if velocities are separating
-						if (velAlongNormal > 0)
-						{
-
-						}
-						else
-						{
-							impulseResolution(A, B, normal, velAlongNormal, penetration, contactPoint);
-						}
-
-						positionalCorrection(A, B, normal, penetration);
-
-					}
-				}
-
 
 			}
 
