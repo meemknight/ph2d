@@ -14,7 +14,30 @@
 #include <ph2d/ph2d.h>
 
 
+// Function to generate a pastel color based on an input number
+glm::vec3 generatePastelColor(int inputNumber)
+{
+	srand(inputNumber);
+
+	// Seed random number generator based on input
+	//auto baseColor = glm::vec3(0,0,0);
+	//glm::vec3 baseColor = glm::ballRand<float>(1.0f);  // Random direction on a sphere
+	glm::vec3 baseColor(rand() % 100 / 100.f, rand() % 100 / 100.f, rand() % 100 / 100.f);
+	baseColor = glm::abs(baseColor);            // Ensure positive values
+
+	// Adjust saturation to pastel range by mixing with white
+	float pastelFactor = 0.7f;
+	glm::vec3 pastelColor = glm::mix(baseColor, glm::vec3(1.0f), pastelFactor);
+
+	// Map input number into [0,1] range
+	float modifier = (inputNumber % 1000) / 1000.0f;
+	pastelColor += modifier * 0.1f;
+
+	return glm::clamp(pastelColor, 0.0f, 1.0f);
+}
+
 gl2d::Renderer2D renderer;
+gl2d::Texture wood;
 
 ph2d::PhysicsEngine physicsEngine;
 
@@ -26,37 +49,41 @@ bool initGame()
 	gl2d::init();
 	renderer.create();
 
-	for (int i = 0; i < 0; i++)
+	physicsEngine.simulationphysicsSettings.gravity = glm::vec2(0, 9.81) * 100.f;
+
+	for (int i = 0; i < 10; i++)
 	{
 		//if (i == 1) { mass = 0; }
 
 		if(1)
 		{
-			float w = rand() % 100 + 20;
-			float h = rand() % 100 + 20;
+			float w = rand() % 100 + 50;
+			float h = rand() % 100 + 50;
 
 			physicsEngine.addBody({rand() % 800 + 100, rand() % 800 + 100},
 				ph2d::createBoxCollider({w, h}));
-			physicsEngine.bodies.back().motionState.rotation = ((rand() % 800) / 800.f) * 3.14159f;
+			//physicsEngine.bodies.back().motionState.momentOfInertia = 0;
 		}
 
-		for(int j = 0; j <2; j++)
+		for(int j = 0; j <1; j++)
 		{
 			float r = rand() % 35 + 10;
 		
-			physicsEngine.addBody({rand() % 800 + 100, rand() % 800 + 100},
+			auto b = physicsEngine.addBody({rand() % 800 + 100, rand() % 800 + 100},
 				ph2d::createCircleCollider({r}));
+			//physicsEngine.bodies[b].motionState.momentOfInertia = 0;
+
 		}
 	}
 
-
+	wood.loadFromFile(RESOURCES_PATH "wood.png");
 
 	//physicsEngine.addBody({500, 1100}, 
 	//	ph2d::createBoxCollider({1100, 10}));
 
-	physicsEngine.addBody({500, 500}, ph2d::createBoxCollider({300, 300}));
+	//physicsEngine.addBody({500, 500}, ph2d::createBoxCollider({300, 300}));
 	
-	physicsEngine.addBody({700, 700}, ph2d::createBoxCollider({300, 300}));
+	//physicsEngine.addBody({700, 700}, ph2d::createBoxCollider({300, 300}));
 
 
 	
@@ -82,10 +109,12 @@ bool initGame()
 	//std::cout << ph2d::rotationToVector(ph2d::vectorToRotation({1,0}) ).x << " " << ph2d::rotationToVector(ph2d::vectorToRotation({1,0}) ).y  << "\n";
 
 	//physicsEngine.addHalfSpaceStaticObject({0, floorPos}, {0, 1});
-	//physicsEngine.addBody({500, floorPos}, ph2d::createBoxCollider({900, 50}));
-	//physicsEngine.bodies.back().motionState.mass = 0;
-	//physicsEngine.bodies.back().motionState.momentOfInertia = 0;
-
+	{
+		auto b = physicsEngine.addBody({500, floorPos - 30}, ph2d::createBoxCollider({1000, 50}));
+		physicsEngine.bodies[b].motionState.mass = 0;
+		physicsEngine.bodies[b].motionState.momentOfInertia = 0;
+		physicsEngine.bodies[b].motionState.rotation = glm::radians(0.f);
+	}
 	return true;
 }
 
@@ -99,6 +128,7 @@ bool gameLogic(float deltaTime)
 	h = platform::getFrameBufferSizeY(); //window h
 
 	glViewport(0, 0, w, h);
+	glClearColor(0.2, 0.22, 0.23, 1);
 	glClear(GL_COLOR_BUFFER_BIT); //clear screen
 
 	renderer.updateWindowMetrics(w, h);
@@ -142,7 +172,7 @@ bool gameLogic(float deltaTime)
 
 	ImGui::DragInt("Speed", &simulationSpeed);
 
-	ImGui::SliderAngle("ANgle", &physicsEngine.bodies[0].motionState.rotation);
+	//ImGui::SliderAngle("ANgle", &physicsEngine.bodies[1].motionState.rotation);
 
 	ImGui::End();
 	ImGui::PopStyleColor();
@@ -150,7 +180,7 @@ bool gameLogic(float deltaTime)
 	static int selected = -1;
 
 	//mouse
-	physicsEngine.bodies[0].motionState.setPos(platform::getRelMousePosition());
+	//physicsEngine.bodies[0].motionState.setPos(platform::getRelMousePosition());
 
 	static glm::vec2 pressedPosition = {};
 
@@ -158,13 +188,13 @@ bool gameLogic(float deltaTime)
 	{
 		selected = -1;
 
-		for (int i = 0; i < physicsEngine.bodies.size(); i++)
+		for (auto &b : physicsEngine.bodies)
 		{
-			if (OBBvsPoint(physicsEngine.bodies[i].getAABB(),
-				physicsEngine.bodies[i].motionState.rotation,
+			if (OBBvsPoint(b.second.getAABB(),
+				b.second.motionState.rotation,
 				platform::getRelMousePosition()))
 			{
-				selected = i;
+				selected = b.first;
 				pressedPosition = platform::getRelMousePosition();
 			}
 		}
@@ -184,9 +214,8 @@ bool gameLogic(float deltaTime)
 		force *= physicsEngine.bodies[selected].motionState.mass;
 
 		physicsEngine.bodies[selected].motionState.applyImpulseWorldPosition(force, 
-			physicsEngine.bodies[selected].motionState.pos
-			//pressedPosition
-			);
+			physicsEngine.bodies[selected].motionState.pos,
+			physicsEngine.bodies[selected].flags);
 
 		//physicsEngine.bodies[selected].motionState.angularVelocity = 10;
 
@@ -207,28 +236,30 @@ bool gameLogic(float deltaTime)
 
 		physicsEngine.runSimulation(deltaTime);
 
-		for (auto &b : physicsEngine.bodies)
+		for (auto &i : physicsEngine.bodies)
 		{
+			auto &b = i.second;
+
 			auto bottom = b.getAABB().max().y;
 			auto left = b.getAABB().min().x;
 			auto right = b.getAABB().max().x;
 			auto top = b.getAABB().min().y;
 
-			//if (bottom > floorPos)
-			//{
-			//	float diff = bottom - floorPos;
-			//	b.motionState.pos.y -= diff;
-			//	b.motionState.lastPos = b.motionState.pos;
-			//
-			//	b.motionState.velocity.y *= -0.9;
-			//}
+			if (bottom > floorPos)
+			{
+				float diff = bottom - floorPos;
+				b.motionState.pos.y -= diff;
+				b.motionState.lastPos = b.motionState.pos;
+			
+				b.motionState.velocity.y *= -0.2;
+			}
 			
 			if (left < 0)
 			{
 				b.motionState.pos.x -= left;
 				b.motionState.lastPos = b.motionState.pos;
 
-				b.motionState.velocity.x *= -0.9;
+				b.motionState.velocity.x *= -0.2;
 			}
 
 			if (right > rightPos)
@@ -236,7 +267,7 @@ bool gameLogic(float deltaTime)
 				b.motionState.pos.x -= right - rightPos;
 				b.motionState.lastPos = b.motionState.pos;
 
-				b.motionState.velocity.x *= -0.9;
+				b.motionState.velocity.x *= -0.2;
 			}
 
 			if (top < 0)
@@ -244,7 +275,7 @@ bool gameLogic(float deltaTime)
 				b.motionState.pos.y -= top;
 				b.motionState.lastPos = b.motionState.pos;
 				
-				b.motionState.velocity.y *= -0.9;
+				b.motionState.velocity.y *= -0.2;
 			}
 		}
 	}
@@ -259,9 +290,12 @@ bool gameLogic(float deltaTime)
 	bool penetrated = 0;
 	glm::vec2 contactPoint = {};
 
+	glm::vec2 tangengA = {};
+	glm::vec2 tangengB = {};
+
 	if (ph2d::BodyvsBody(physicsEngine.bodies[0],
 		physicsEngine.bodies[1],
-		p, n, contactPoint))
+		p, n, contactPoint, tangengA, tangengB ))
 	{
 		penetrated = true;
 	}
@@ -315,7 +349,7 @@ bool gameLogic(float deltaTime)
 	{
 		auto &b = physicsEngine.bodies[i];
 
-		auto color = Colors_White;
+		auto color = glm::vec4(generatePastelColor(i), 1);
 
 		if (i == selected)
 		{
@@ -335,7 +369,7 @@ bool gameLogic(float deltaTime)
 		if (b.collider.type == ph2d::ColliderCircle)
 		{
 			renderer.renderCircleOutline(b.motionState.pos,
-				b.collider.collider.circle.radius, color, 2, 32);
+				b.collider.collider.circle.radius, color, 4, 32);
 
 			glm::vec2 vector = {1,0};
 			vector = ph2d::rotateAroundCenter(vector, b.motionState.rotation);
@@ -347,7 +381,9 @@ bool gameLogic(float deltaTime)
 		{
 			float rotation = glm::degrees(b.motionState.rotation);
 
-			renderer.renderRectangleOutline(b.getAABB().asVec4(), color, 2, {}, rotation);
+			//renderer.renderRectangle(b.getAABB().asVec4(), wood, Colors_White, {}, rotation);
+
+			renderer.renderRectangleOutline(b.getAABB().asVec4(), color, 4, {}, rotation);
 		}
 		else if (b.collider.type == ph2d::ColliderHalfSpace)
 		{
@@ -358,7 +394,7 @@ bool gameLogic(float deltaTime)
 
 			glm::vec2 lineEquationStart = lineEquation.getClosestPointToOrigin();
 			lineEquationStart -= lineEquation.getLineVector() * 1000.f;
-			renderer.renderLine(lineEquationStart, lineEquationStart + lineEquation.getLineVector() * 2000.f, Colors_Red);
+			renderer.renderLine(lineEquationStart, lineEquationStart + lineEquation.getLineVector() * 2000.f, Colors_Red, 4);
 
 
 		}

@@ -14,14 +14,25 @@
 // that means position x, position y; size x, size y.
 // you can easily convert from a vec4 to an aabb and back
 
+#pragma once
+
 #undef min
 #undef max
 
 #include <glm/glm.hpp>
 #include <vector>
+#include <bitset>
+#include <unordered_map>
+
+constexpr static int PH2D_MAX_CONVEX_SHAPE_POINTS = 12;
+
 
 namespace ph2d
 {
+
+	using ph2dUserData = std::uint64_t;
+	using ph2dBodyId = std::uint32_t;
+
 	struct LineEquation;
 
 
@@ -69,13 +80,13 @@ namespace ph2d
 
 		glm::vec2 getTopLeftCorner() { return center += glm::vec2(-r, r); }
 
-		AABB getAABB() { return glm::vec4(getTopLeftCorner(), r*2, r*2); }
+		AABB getAABB() { return glm::vec4(getTopLeftCorner(), r * 2, r * 2); }
 	};
 
 	bool OBBvsOBB(AABB a, float ar, AABB b, float br);
 
-	bool OBBvsOBB(AABB a, float ar, AABB b, float br, float &penetration, 
-		glm::vec2 &normal, glm::vec2 &contactPoint);
+	bool OBBvsOBB(AABB a, float ar, AABB b, float br, float &penetration,
+		glm::vec2 &normal, glm::vec2 &contactPoint, glm::vec2 &tangentA, glm::vec2 &tangentB);
 
 	bool AABBvsAABB(AABB a, AABB b, float delta = 0);
 
@@ -87,7 +98,7 @@ namespace ph2d
 
 	bool HalfSpaceVSCircle(LineEquation line, AABB circle, float &penetration, glm::vec2 &normal, glm::vec2 &contactPoint);
 
-	bool OBBvsCircle(AABB abox, float ar, AABB bbox, float &penetration, glm::vec2 &normal, 
+	bool OBBvsCircle(AABB abox, float ar, AABB bbox, float &penetration, glm::vec2 &normal,
 		glm::vec2 &contactPoint);
 
 	bool CirclevsCircle(Circle a, Circle b,
@@ -100,6 +111,42 @@ namespace ph2d
 	glm::vec2 rotateAroundCenter(glm::vec2 in, float r);
 
 	glm::vec2 rotateAroundPoint(glm::vec2 in, glm::vec2 centerReff, float r);
+
+
+	enum
+	{
+		BodyFlag_freezeX = 0,
+		BodyFlag_freezeY = 1,
+		BodyFlag_freezeRotation = 2,
+		BodyFlag_Sensor = 3,
+
+	};
+
+	struct BodyFlags
+	{
+		std::bitset<8> flags = {};
+
+		//the kinematic body is just a body with frozen rotation and positions!
+		bool isKinematic() { return isFreezeX() && isFreezeY() && isFreezeRotation(); }
+
+		//the kinematic body is just a body with frozen rotation and positions!
+		void setKinematic(bool k = true) { setFreezeX(k); setFreezeY(k); setFreezeRotation(k); }
+
+		bool isFreezeX() const { return flags.test(BodyFlag_freezeX); }
+		void setFreezeX(bool f = true) { flags.set(BodyFlag_freezeX, f); }
+
+		bool isFreezeY() const { return flags.test(BodyFlag_freezeY); }
+		void setFreezeY(bool f = true) { flags.set(BodyFlag_freezeY, f); }
+
+		bool isFreezePosition() const { return isFreezeX() && isFreezeY(); }
+		void setFreezePosition(bool f = true) { setFreezeX(f); setFreezeY(f); }
+
+		bool isFreezeRotation() const { return flags.test(BodyFlag_freezeRotation); }
+		void setFreezeRotation(bool f = true) { flags.set(BodyFlag_freezeRotation, f); }
+
+		bool isSensor() const { return flags.test(BodyFlag_Sensor); }
+		void setSensor(bool s = true) { flags.set(BodyFlag_Sensor, s); }
+	};
 
 	struct MotionState
 	{
@@ -116,9 +163,9 @@ namespace ph2d
 
 		void setPos(glm::vec2 p) { pos = p; lastPos = p; }
 
-		void applyImpulseObjectPosition(glm::vec2 impulse, glm::vec2 contactVector);
-		
-		void applyImpulseWorldPosition(glm::vec2 impulse, glm::vec2 contactVectorWorldPos);
+		void applyImpulseObjectPosition(glm::vec2 impulse, glm::vec2 contactVector, BodyFlags flags);
+
+		void applyImpulseWorldPosition(glm::vec2 impulse, glm::vec2 contactVectorWorldPos, BodyFlags flags);
 
 	};
 
@@ -165,7 +212,7 @@ namespace ph2d
 		float getDistanceToPoint(const glm::vec2 &point) const
 		{
 			// Calculate signed distance from point to the line
-			return (lineEquation.x * point.x + lineEquation.y * point.y + lineEquation.z) 
+			return (lineEquation.x * point.x + lineEquation.y * point.y + lineEquation.z)
 				/ std::sqrt(lineEquation.x * lineEquation.x + lineEquation.y * lineEquation.y);
 		}
 
@@ -192,11 +239,25 @@ namespace ph2d
 			return -lineEquation.z * normal;
 		}
 
-		// Rotate the normal by 90 degrees to get a direction along the line
+		// Returns a direction along the line
 		glm::vec2 getLineVector() const
 		{
 			return glm::vec2(-lineEquation.y, lineEquation.x);
 		}
+	};
+
+	struct ConvexPolygon
+	{
+		//the vertexes of the object as distance from center, in a trigonometrical /
+			// anti trigonometrical order.
+		glm::vec2 vertexesObjectSpace[PH2D_MAX_CONVEX_SHAPE_POINTS];
+		unsigned char vertexCount;
+
+		void getCornersRotated(glm::vec2 corners[PH2D_MAX_CONVEX_SHAPE_POINTS], float angle) const;
+
+		void getCornersRotatedInWorlSpace(glm::vec2 corners[PH2D_MAX_CONVEX_SHAPE_POINTS], float angle,
+			glm::vec2 centerPos) const;
+
 	};
 
 	struct Collider
@@ -212,7 +273,8 @@ namespace ph2d
 			{
 				float radius;
 			}circle;
-	
+
+			ConvexPolygon convexPolygon;
 		} collider = {};
 
 		unsigned char type = 0;
@@ -228,53 +290,127 @@ namespace ph2d
 		ColliderCircle,
 		ColliderBox,
 		ColliderHalfSpace,
+		ColliderConvexPolygon,
 	};
 
 	Collider createBoxCollider(glm::vec2 size);
 
 	Collider createCircleCollider(float r);
 
+	Collider createConvexPolygonCollider(glm::vec2 *shape, unsigned char count);
+
+
 	struct Body
 	{
+		Collider collider = {};
+
+		ph2dUserData userData;
+
 		//we use center position
 		MotionState motionState;
 
-		Collider collider = {};
+		void applyImpulseObjectPosition(glm::vec2 impulse, glm::vec2 contactVector);
+
+		void applyImpulseWorldPosition(glm::vec2 impulse, glm::vec2 contactVectorWorldPos);
+
+		glm::vec2 gravityScale = {1,1};
 
 		float elasticity = 0.2;
-		float staticFriction = 0.5;
-		float dynamicFriction = 0.4;
+		float staticFriction = 0.7;
+		float dynamicFriction = 0.6;
+		float dragScale = 1;
+		float angularDragScale = 1;
+
+		BodyFlags flags;
 
 		AABB getAABB();
 
+		bool isHalfPlane();
+
 		bool intersectPoint(glm::vec2 p, float delta = 0);
+
+		LineEquation getLineEquationForHalfPlaneColliders();
 	};
 
 	bool BodyvsBody(Body &A, Body &B, float &penetration,
-		glm::vec2 &normal, glm::vec2 &contactPoint);
+		glm::vec2 &normal, glm::vec2 &contactPoint,
+		glm::vec2 &tangentA, glm::vec2 &tangentB, bool *reverseOrder = 0);
+
+	struct ManifoldIntersection
+	{
+		glm::vec2 normal = {};
+		glm::vec2 contactPoint = {};
+		glm::vec2 tangentA = {};
+		glm::vec2 tangentB = {};
+		float penetration = 0;
+		ph2dBodyId A = 0;
+		ph2dBodyId B = 0;
+		float massA = 0;
+		float massB = 0;
+	};
+
+	struct SimulationPhysicsSettings
+	{
+		glm::vec2 gravity{0, 9.81};
+		float maxVelocity = 10'000;
+		float minVelocity = 0.1;
+		float minAngularVelocity = 0.01;
+		float maxAcceleration = 10'000;
+		float maxAirDrag = 100;
+		float maxAngularDrag = 100;
+		float airDragCoeficient = 0.1f;
+		float rotationalDragCoeficient = 0.01f;
+		float restingVelocity = 0.01;
+		float restingAngularVelocity = glm::radians(0.01);
+	};
+
+	struct Constrain
+	{
+		ph2dBodyId A;
+		ph2dBodyId B;
+
+		float restingDistance = 0;
+		float elasticForce = 50000;
+
+	};
 
 	struct PhysicsEngine
 	{
-		std::vector<Body> bodies;
+		ph2dBodyId idCounter = 0;
+
+		std::unordered_map<ph2dBodyId, Body> bodies;
+
+		std::unordered_map<ph2dBodyId, Constrain> constrains;
+
+
+		//for internal use for now
+		std::vector<ManifoldIntersection> intersections;
 
 		//this will make the simulation run at fixed intervals of time, making it deterministic.
 		// it is measured in secconds, so if you set it to 0.016, it will be updated 60 times a seccond, 
 		// if you set it to 0.032, it will be updated 30 times a seccond, and a smaller number will get a lot more updates!
 		//you can set it to 0 if you want it to just update with the deltaTime;
-		float setFixedTimeStamp = 0.016;
+		float setFixedTimeStamp = 0.008;
 		float maxAccumulated = 0.32;
 		int collisionChecksCount = 8;
 
 		float _fixedTimeAccumulated = 0;
 		void runSimulation(float deltaTime);
 
-		void addBody(glm::vec2 centerPos, Collider collider);
+		SimulationPhysicsSettings simulationphysicsSettings;
 
-		void addHalfSpaceStaticObject(glm::vec2 position, glm::vec2 normal);
+		ph2dBodyId addBody(glm::vec2 centerPos, Collider collider);
+
+		ph2dBodyId addConstrain(Constrain c);
+
+		ph2dBodyId addHalfSpaceStaticObject(glm::vec2 position, glm::vec2 normal);
 	};
 
 	glm::mat2 rotationMatrix(float angle);
 
 	void integrateForces(MotionState &motionState, float mass, float deltaTime);
+
+	float cross(glm::vec2 a, glm::vec2 b);
+
 
 };
